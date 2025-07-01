@@ -76,7 +76,7 @@ class SLAMSystem:
             odometry: 里程计数据，格式为(dx, dy, dtheta)，单位为毫米和度
         """
         # 确保激光雷达数据是整数数组
-        scan_data = np.array(lidar_data, dtype=np.int)
+        scan_data = np.array(lidar_data, dtype=np.int32)
         
         if self.use_odometry and odometry is not None:
             # 使用里程计数据更新SLAM

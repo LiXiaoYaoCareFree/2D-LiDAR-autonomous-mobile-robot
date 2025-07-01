@@ -303,43 +303,18 @@ class MazeSolver:
             return (current_pose[0], current_pose[1], current_pose[2]), False
     
     def get_state_name(self):
-        """获取当前状态的名称"""
+        """获取当前状态名称"""
         return self.state.name
     
     def get_performance_stats(self):
         """获取性能统计信息"""
-        stats = {
-            'state': self.state.name,
-            'exploration_time': None,
-            'exit_navigation_time': None,
-            'return_time': None,
-            'total_time': None
-        }
-        
-        current_time = time.time()
-        
-        if self.exploration_start_time:
-            if self.exit_found_time:
-                stats['exploration_time'] = self.exit_found_time - self.exploration_start_time
-            else:
-                stats['exploration_time'] = current_time - self.exploration_start_time
-        
-        if self.exit_found_time:
-            if self.exit_reached_time:
-                stats['exit_navigation_time'] = self.exit_reached_time - self.exit_found_time
-            else:
-                stats['exit_navigation_time'] = current_time - self.exit_found_time
-        
-        if self.exit_reached_time:
-            if self.completion_time:
-                stats['return_time'] = self.completion_time - self.exit_reached_time
-            else:
-                stats['return_time'] = current_time - self.exit_reached_time
-        
-        if self.exploration_start_time:
-            if self.completion_time:
-                stats['total_time'] = self.completion_time - self.exploration_start_time
-            else:
-                stats['total_time'] = current_time - self.exploration_start_time
-        
-        return stats 
+        return {
+            'exploration_time': (self.exit_found_time - self.exploration_start_time) 
+                                if self.exit_found_time and self.exploration_start_time else None,
+            'exit_navigation_time': (self.exit_reached_time - self.exit_found_time) 
+                                   if self.exit_reached_time and self.exit_found_time else None,
+            'return_time': (self.completion_time - self.return_start_time) 
+                          if self.completion_time and self.return_start_time else None,
+            'total_time': (self.completion_time - self.exploration_start_time) 
+                         if self.completion_time and self.exploration_start_time else None
+        } 

@@ -455,6 +455,9 @@ class RobotGUI:
         # 设置更新标志
         self.update_flag = True
         
+        # 立即更新GUI，不等待更新线程
+        self.root.after(0, self._update_gui)
+        
         # 更新状态栏
         if current_state:
             self.status_bar.config(text=f"当前状态: {current_state}")

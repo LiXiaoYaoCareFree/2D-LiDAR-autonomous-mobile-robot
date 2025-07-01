@@ -1,110 +1,131 @@
-# 2D激光雷达自主移动机器人
+# 2D激光雷达自主移动机器人系统
 
-本项目实现了一个基于2D激光雷达的自主移动机器人系统，包括SLAM地图构建、路径规划、导航控制等功能。
+这是一个使用2D激光雷达的自主移动机器人系统，实现了SLAM（同步定位与地图构建）、自主导航和迷宫求解功能。
 
-## 功能特点
+## 功能特性
 
-- **SLAM地图构建**：使用BreezySLAM库处理激光雷达数据，构建环境地图
-- **边界探索**：实现边界检测算法，探索未知区域
-- **路径规划**：使用A*算法规划最短路径
-- **导航控制**：实现机器人的运动控制
-- **数据可视化**：使用PyRoboViz可视化地图和路径
-- **蓝牙通信**：与机器人硬件进行数据交换
-- **数据记录**：记录传感器数据和导航命令
-- **模拟器**：提供模拟环境进行测试
+1. **SLAM**：使用BreezySLAM库处理激光雷达数据，构建环境地图
+2. **路径规划**：实现基于A*算法的全局路径规划和动态窗口法(DWA)的局部避障
+3. **迷宫求解**：能够自主探索未知环境，找到出口并规划最优返回路径
+4. **可视化界面**：美观的GUI界面，实时显示地图构建和导航过程
+5. **数据记录**：记录传感器数据、地图和导航命令，支持离线分析
 
-## 高级功能
+## 系统要求
 
-### 随机迷宫解决方案
+- Python 3.8+
+- numpy
+- matplotlib
+- pygame (可视化界面)
+- PySerial (蓝牙通信)
+- scikit-image (地图处理)
 
-- **信息增益边界探索**：基于信息增益的边界探索策略，更高效地探索未知区域
-- **出口检测**：自动检测迷宫出口位置
-- **最优路径规划**：使用优化算法规划最优路径，考虑障碍物距离和路径平滑度
-- **完整探索策略**：包括探索、找到出口、前往出口、返回起点的完整流程
-- **性能统计**：记录探索时间、导航时间等性能指标
+## 安装
 
-### 交互界面升级
-
-- **美观的GUI界面**：使用Tkinter和Matplotlib构建美观的用户界面
-- **实时地图可视化**：显示实时更新的占用栅格地图
-- **导航可视化**：显示机器人位置、路径、边界点等
-- **状态监控**：显示当前状态、性能统计等信息
-- **控制面板**：提供启动、停止、重置等控制功能
-- **日志记录**：显示系统运行日志
-
-## 安装说明
-
-1. 克隆仓库：
-
+1. 克隆仓库
 ```bash
 git clone https://github.com/yourusername/2d-lidar-robot.git
 cd 2d-lidar-robot
 ```
 
-2. 安装依赖：
-
+2. 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-3. 安装BreezySLAM：
+## 使用方法
 
+### 使用模拟器演示
 ```bash
-cd BreezySLAM
-python setup.py install
-cd ..
+python demo.py
 ```
 
-4. 安装PyRoboViz：
-
+### 使用真实设备
 ```bash
-cd PyRoboViz
-python setup.py install
-cd ..
+python demo.py --map-size 800 --map-scale 32.0 --log-dir ./logs
 ```
 
-## 使用说明
+### 高级迷宫求解演示
 
-### 运行演示程序
-
+1. 使用模拟器
 ```bash
-python demo_maze_solver.py --simulator
+python demo_maze_solver.py maze --simulator --map-size 800 --map-scale 32.0
 ```
 
-### 命令行参数
+2. 使用实际设备
+```bash
+python demo_maze_solver.py maze --port COM3 --map-size 800 --map-scale 32.0
+```
 
-- `--simulator`：使用模拟器模式（默认）
-- `--map-size-pixels`：设置地图大小（像素）
-- `--map-size-meters`：设置地图大小（米）
+### BreezySLAM示例演示
 
-### GUI界面操作
+1. 使用exp1数据集(使用里程计)
+```bash
+python demo_maze_solver.py breezyslam --dataset exp1 --odometry
+```
 
-- **启动**：开始运行系统
-- **停止**：停止系统运行
-- **重置**：重置系统状态
-- **保存地图**：保存当前地图
-- **加载地图**：加载已有地图
-- **设置**：打开设置面板
+2. 使用exp2数据集(不使用里程计)
+```bash
+python demo_maze_solver.py breezyslam --dataset exp2 --no-odometry
+```
 
-## 系统架构
+3. 使用粒子滤波
+```bash
+python demo_maze_solver.py breezyslam --dataset exp1 --seed 9999
+```
 
-- **主控模块**（robot_control_system.py）：协调各模块工作
-- **SLAM模块**（slam_module.py）：处理激光雷达数据，构建地图
-- **导航模块**（navigation.py）：实现边界检测和路径规划
-- **高级导航模块**（advanced_navigation.py）：实现信息增益边界探索和最优路径规划
-- **迷宫求解器**（maze_solver.py）：实现迷宫探索和解决策略
-- **可视化模块**（visualization.py）：显示地图和路径
-- **增强可视化模块**（enhanced_visualization.py）：提供美观的GUI界面
-- **通信模块**（communication.py）：与机器人进行数据交换
-- **数据记录模块**（data_logger.py）：记录传感器数据和导航命令
-- **模拟器**（simulator.py）：生成模拟数据用于测试
+4. 使用增强可视化界面
+```bash
+python demo_maze_solver.py breezyslam --dataset exp1 --enhanced-viz
+```
 
-## 开发环境
+5. 也可以通过demo.py运行BreezySLAM示例
+```bash
+python demo.py --breezyslam --dataset exp1 --odometry 1 --seed 9999
+```
 
-- Python 3.8+
-- Windows 10/11 或 Linux
-- 依赖库：NumPy, Matplotlib, SciPy, Tkinter, PySerial 等
+## 模块说明
+
+- **SLAM模块**：处理激光雷达和里程计数据，构建环境地图
+- **导航模块**：实现边界探索和路径规划
+- **可视化模块**：显示地图和机器人位置
+- **通信模块**：通过蓝牙与机器人通信
+- **数据记录模块**：记录传感器数据和导航命令
+- **模拟器**：模拟激光雷达数据和随机迷宫环境
+
+## 示例数据集
+
+系统集成了BreezySLAM项目中的两个示例数据集：
+
+- **exp1.dat**：包含激光雷达和里程计数据的示例1
+- **exp2.dat**：包含激光雷达和里程计数据的示例2
+
+## 项目结构
+
+```
+.
+├── modules/                # 功能模块
+│   ├── slam_module.py      # SLAM模块
+│   ├── navigation.py       # 导航模块
+│   ├── visualization.py    # 可视化模块
+│   ├── communication.py    # 通信模块
+│   ├── data_logger.py      # 数据记录模块
+│   └── advanced_navigation.py # 高级导航模块
+├── BreezySLAM/             # BreezySLAM库
+├── demo.py                 # 基础演示脚本
+├── demo_maze_solver.py     # 迷宫求解演示脚本
+├── simulator.py            # 模拟器
+└── README.md               # 说明文档
+```
+
+## 扩展开发
+
+系统设计为模块化结构，可以方便地扩展和定制。
+
+1. 添加新的传感器支持
+2. 实现更先进的SLAM算法
+3. 开发更高级的路径规划算法
+4. 增强可视化界面功能
 
 ## 许可证
 
-MIT License
+MIT
