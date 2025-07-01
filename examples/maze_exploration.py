@@ -294,6 +294,8 @@ class MazeExploration:
         obstacles = grid_env.obstacles
         for i in range(10, 21):
             obstacles.add((i, 15))
+        for i in range(30, 35):
+            obstacles.add((i, 15))
         for i in range(15):
             obstacles.add((20, i))
         for i in range(15, 30):
