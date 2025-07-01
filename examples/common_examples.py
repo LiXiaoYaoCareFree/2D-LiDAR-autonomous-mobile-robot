@@ -40,7 +40,7 @@ if __name__ == '__main__':
 
 
     # -------------global planners-------------
-    plt = AStar(start=(5, 5), goal=(45, 25), env=grid_env)
+    # plt = AStar(start=(5, 5), goal=(45, 25), env=grid_env)
     # plt = DStar(start=(5, 5), goal=(45, 25), env=grid_env)
     # plt = DStarLite(start=(5, 5), goal=(45, 25), env=grid_env)
     # plt = Dijkstra(start=(5, 5), goal=(45, 25), env=grid_env)
