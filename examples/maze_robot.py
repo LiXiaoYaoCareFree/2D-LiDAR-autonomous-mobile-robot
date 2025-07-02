@@ -16,46 +16,65 @@ from maze_sensor import LaserSensor
 class Robot:
     """自主移动机器人"""
     def __init__(self, start_pos, env):
-        self.x, self.y, self.theta = start_pos
+        # 初始化位置和方向
+        self.x, self.y = start_pos[:2]
+        self.theta = start_pos[2] if len(start_pos) > 2 else 0.0
+        
+        # 环境
         self.env = env
-        self.path = []  # 机器人走过的路径
-        self.laser_sensor = LaserSensor(env)
         
-        # 探索相关数据结构
-        self.explored_map = set()  # 已经探索的区域
-        self.frontier = set()      # 边界区域
-        self.visited_cells = set() # 已访问的单元格（避免重复走）
+        # 传感器
+        self.sensor = LaserSensor(max_range=5.0, num_rays=36)
         
-        # 添加起始位置
-        self.path.append((self.x, self.y))
-        self.explored_map.add((int(round(self.x)), int(round(self.y))))
+        # 探索相关
+        self.visited_cells = set()  # 已访问的单元格
+        self.frontier = set()  # 边界单元格
+        self.exploration_stack = []  # 探索栈
+        self.failed_targets = set()  # 无法到达的目标点
+        self.path = []  # 路径
+        self.goal_path = []  # 到目标的路径
+        self.last_positions = []  # 最近的位置，用于检测是否被卡住
+        self.random_move_count = 0  # 随机移动的次数
+        self.stuck_threshold = 5  # 卡住的阈值
+        
+        # 探索方向
+        self.directions = [
+            (1, 0),   # 右
+            (0, 1),   # 上
+            (-1, 0),  # 左
+            (0, -1),  # 下
+            (1, 1),   # 右上
+            (-1, 1),  # 左上
+            (-1, -1), # 左下
+            (1, -1)   # 右下
+        ]
+        
+        # 标记起始位置为已访问
         self.visited_cells.add((int(round(self.x)), int(round(self.y))))
         
-        # 探索算法需要的数据结构
-        self.exploration_stack = []  # 探索栈
-        self.failed_targets = set()  # 记录失败的目标点
+        # 初始化边界
+        self.update_frontier()
         
-        # 方向：上、右、下、左
-        self.directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+        # 传感器数据
+        self.sensor_data = []
         
-        # 激光传感器数据
-        self.laser_points = []
+        # 探索进度
+        self.exploration_progress = 0.0
         
-        # 探索进度统计
-        self.exploration_progress = 0
-        
-        # 为A*算法创建路径
-        self.optimal_path = []
+        # 调试信息
+        print(f"机器人初始化在位置 ({self.x}, {self.y})")
+        print(f"环境大小: {self.env.x_range}x{self.env.y_range}")
         
         # 添加迷宫格子探索相关参数
         self.maze_cells = {}  # 用于记录迷宫的每个格子的状态：0=未知，1=通路，2=墙壁
         self.cell_size = 1    # 格子大小
         self.initialize_maze_cells()
         
-        # 卡住检测
-        self.last_positions = []  # 记录最近的位置
-        self.stuck_threshold = 10  # 如果10步内位置没有明显变化，认为卡住了
-        self.random_move_count = 0  # 随机移动计数
+        # 初始化路径
+        self.path.append((self.x, self.y))
+        
+        # 设置初始移动方向
+        self.first_move_done = False
         
     def initialize_maze_cells(self):
         """初始化迷宫格子状态"""
@@ -71,7 +90,7 @@ class Robot:
     def update_maze_cells(self):
         """更新迷宫格子状态"""
         # 更新已探索区域为通路
-        for x, y in self.explored_map:
+        for x, y in self.visited_cells:
             cell_x = (x // self.cell_size) * self.cell_size
             cell_y = (y // self.cell_size) * self.cell_size
             self.maze_cells[(cell_x, cell_y)] = 1  # 1表示通路
@@ -88,7 +107,7 @@ class Robot:
         self.frontier = set()
         
         # 遍历所有已探索的单元格
-        for cell in self.explored_map:
+        for cell in self.visited_cells:
             # 检查四个方向的邻居
             for dx, dy in self.directions:
                 nx, ny = cell[0] + dx, cell[1] + dy
@@ -97,75 +116,74 @@ class Robot:
                 # 如果邻居在地图范围内，不是障碍物，且未被探索，则是边界
                 if (0 <= nx < self.env.x_range and 0 <= ny < self.env.y_range and
                     neighbor not in self.env.obstacles and
-                    neighbor not in self.explored_map):
+                    neighbor not in self.visited_cells):
                     self.frontier.add(neighbor)
     
     def update_position(self, new_pos):
         """更新机器人位置"""
-        new_x, new_y, new_theta = new_pos
+        new_x, new_y = new_pos[:2]
+        new_theta = new_pos[2] if len(new_pos) > 2 else self.theta
         
-        # 检查新位置是否在地图范围内
+        # 检查新位置是否有效
         if not (0 <= new_x < self.env.x_range and 0 <= new_y < self.env.y_range):
-            print(f"位置 ({new_x}, {new_y}) 超出地图范围")
+            print(f"警告：位置 ({new_x}, {new_y}) 超出地图范围")
             return False
         
         # 检查新位置是否是障碍物
         if (int(round(new_x)), int(round(new_y))) in self.env.obstacles:
-            print(f"位置 ({new_x}, {new_y}) 是障碍物")
+            print(f"警告：位置 ({new_x}, {new_y}) 是障碍物")
             return False
         
-        # 检查从当前位置到新位置的路径是否穿过障碍物
-        if not self.is_path_clear(int(round(self.x)), int(round(self.y)), 
-                                int(round(new_x)), int(round(new_y))):
-            print(f"从 ({self.x}, {self.y}) 到 ({new_x}, {new_y}) 的路径穿过障碍物")
-            return False
-        
-        # 计算移动距离
-        dist = math.sqrt((new_x - self.x) ** 2 + (new_y - self.y) ** 2)
-        
-        # 如果距离太远，可能会穿过障碍物，拒绝移动
-        if dist > 2.0:
-            print(f"移动距离 {dist:.2f} 太远，可能会穿过障碍物")
-            return False
+        old_x, old_y = self.x, self.y
+        self.x, self.y = new_x, new_y
+        self.theta = new_theta
             
-        # 更新位置和角度
-        self.x, self.y, self.theta = new_x, new_y, new_theta
-        
-        # 记录路径
+        # 添加到路径
         self.path.append((self.x, self.y))
+        if len(self.path) > 1000:  # 限制路径长度
+            self.path = self.path[-1000:]
+            
+        # 标记当前位置为已访问
+        current_cell = (int(round(self.x)), int(round(self.y)))
+        self.visited_cells.add(current_cell)
         
-        # 将当前位置标记为已探索和已访问
-        grid_pos = (int(round(self.x)), int(round(self.y)))
-        self.explored_map.add(grid_pos)
-        self.visited_cells.add(grid_pos)
+        # 更新边界
+        self.update_frontier()
         
-        # 扫描环境
-        self.scan_environment()
-        
-        # 检查是否卡住
-        self.last_positions.append(grid_pos)
+        # 更新最近的位置列表，用于检测是否被卡住
+        self.last_positions.append(current_cell)
         if len(self.last_positions) > self.stuck_threshold:
             self.last_positions.pop(0)
             
-        # 如果最近的位置都相同或来回移动，认为被卡住
+        # 检测是否被卡住
         if len(self.last_positions) == self.stuck_threshold:
-            unique_positions = set(self.last_positions)
-            if len(unique_positions) <= 2:
-                print(f"机器人可能被卡住在位置{grid_pos}，尝试随机移动")
-                self.random_move_count = 5  # 设置随机移动次数
+            if all(pos == self.last_positions[0] for pos in self.last_positions):
+                print(f"警告: 机器人可能被卡住在 {current_cell}")
+                self.random_move_count = 3  # 设置随机移动次数
                 
+        # 更新迷宫单元格状态
+        self.update_maze_cells()
+        
+        # 打印移动信息
+        print(f"机器人从 ({old_x:.1f}, {old_y:.1f}) 移动到 ({self.x:.1f}, {self.y:.1f})")
+        
+        # 更新探索进度
+        total_cells = (self.env.x_range - 2) * (self.env.y_range - 2) - len(self.env.obstacles)
+        explored_cells = len(self.visited_cells)
+        self.exploration_progress = explored_cells / total_cells * 100 if total_cells > 0 else 0
+        
         return True
     
     def scan_environment(self):
         """使用激光雷达扫描环境，更新探索地图"""
         # 使用激光传感器扫描环境
-        self.laser_points = self.laser_sensor.scan((self.x, self.y, self.theta))
+        self.sensor_data = self.sensor.scan((self.x, self.y, self.theta))
         
         # 更新已探索区域
         current_x, current_y = int(round(self.x)), int(round(self.y))
         
         # 将当前位置标记为已探索
-        self.explored_map.add((current_x, current_y))
+        self.visited_cells.add((current_x, current_y))
         
         # 更新周围的探索区域（模拟视野）
         view_range = 2
@@ -175,16 +193,16 @@ class Robot:
                 if 0 <= nx < self.env.x_range and 0 <= ny < self.env.y_range:
                     # 只添加非障碍物区域
                     if (nx, ny) not in self.env.obstacles:
-                        self.explored_map.add((nx, ny))
+                        self.visited_cells.add((nx, ny))
         
         # 处理激光点
-        for point in self.laser_points:
+        for point in self.sensor_data:
             # 计算激光点的栅格坐标
             grid_x, grid_y = int(round(point[0])), int(round(point[1]))
             
             # 将激光点标记为已探索
             if 0 <= grid_x < self.env.x_range and 0 <= grid_y < self.env.y_range:
-                self.explored_map.add((grid_x, grid_y))
+                self.visited_cells.add((grid_x, grid_y))
                 
                 # 如果是障碍物，确保它在障碍物集合中
                 if (grid_x, grid_y) in self.env.obstacles:
@@ -194,95 +212,144 @@ class Robot:
                 points = self.bresenham_line(current_x, current_y, grid_x, grid_y)
                 for px, py in points:
                     if 0 <= px < self.env.x_range and 0 <= py < self.env.y_range:
-                        self.explored_map.add((px, py))
+                        self.visited_cells.add((px, py))
         
         # 更新未探索的边界单元格
         self.update_frontier_cells()
         
         # 计算探索进度
         total_cells = (self.env.x_range - 2) * (self.env.y_range - 2) - len(self.env.obstacles)
-        explored_cells = len(self.explored_map - self.env.obstacles)
+        explored_cells = len(self.visited_cells - self.env.obstacles)
         self.exploration_progress = explored_cells / total_cells * 100 if total_cells > 0 else 100
         
         # 更新迷宫格子状态
         self.update_maze_cells()
     
     def explore_maze(self):
-        """探索迷宫，寻找目标点，避免重复走相同的路径"""
+        """探索迷宫，确保完整遍历所有可达区域"""
+        # 第一次移动时，强制向右移动一步
+        if not self.first_move_done:
+            self.first_move_done = True
+            next_x, next_y = int(round(self.x)) + 1, int(round(self.y))
+            if (0 < next_x < self.env.x_range - 1 and 
+                0 < next_y < self.env.y_range - 1 and 
+                (next_x, next_y) not in self.env.obstacles):
+                
+                print(f"初始移动到 ({next_x}, {next_y})")
+                self.update_position((next_x, next_y, 0.0))
+                return True
+            else:
+                # 如果右边不能走，尝试向下
+                next_x, next_y = int(round(self.x)), int(round(self.y)) + 1
+                if (0 < next_x < self.env.x_range - 1 and 
+                    0 < next_y < self.env.y_range - 1 and 
+                    (next_x, next_y) not in self.env.obstacles):
+                    
+                    print(f"初始移动到 ({next_x}, {next_y})")
+                    self.update_position((next_x, next_y, math.pi/2))
+                    return True
+                
         # 如果需要随机移动，执行随机移动
         if self.random_move_count > 0:
+            print(f"执行随机移动，剩余随机移动次数: {self.random_move_count}")
             self.random_move_count -= 1
-            print(f"执行随机移动，剩余{self.random_move_count}次")
             
-            # 随机选择一个方向
-            directions = list(self.directions)
-            random.shuffle(directions)
+            # 获取所有可能的移动方向
+            possible_moves = []
+            current_x, current_y = int(round(self.x)), int(round(self.y))
             
-            # 尝试每个方向
-            for dx, dy in directions:
-                next_x, next_y = int(round(self.x)) + dx, int(round(self.y)) + dy
+            for dx, dy in self.directions:
+                next_x, next_y = current_x + dx, current_y + dy
                 if (0 < next_x < self.env.x_range - 1 and 
                     0 < next_y < self.env.y_range - 1 and 
                     (next_x, next_y) not in self.env.obstacles and
-                    (next_x, next_y) not in self.visited_cells and  # 避免重复走
-                    self.is_path_clear(int(round(self.x)), int(round(self.y)), next_x, next_y)):
-                    
-                    target_theta = math.atan2(dy, dx)
-                    print(f"随机移动到 ({next_x}, {next_y})")
-                    self.update_position((next_x, next_y, target_theta))
+                    (next_x, next_y) not in self.failed_targets):
+                    possible_moves.append((next_x, next_y))
+            
+            # 如果有可能的移动，随机选择一个
+            if possible_moves:
+                next_pos = random.choice(possible_moves)
+                dx = next_pos[0] - current_x
+                dy = next_pos[1] - current_y
+                target_theta = math.atan2(dy, dx)
+                
+                print(f"随机移动到 {next_pos}")
+                if self.update_position((next_pos[0], next_pos[1], target_theta)):
                     return True
             
-            # 如果所有未访问方向都被阻塞，尝试已访问但不是最近访问的方向
-            for dx, dy in directions:
-                next_x, next_y = int(round(self.x)) + dx, int(round(self.y)) + dy
+            # 如果随机移动失败，尝试移动到未访问的邻居单元格
+            for dx, dy in self.directions:
+                next_x, next_y = current_x + dx, current_y + dy
                 if (0 < next_x < self.env.x_range - 1 and 
                     0 < next_y < self.env.y_range - 1 and 
                     (next_x, next_y) not in self.env.obstacles and
-                    (next_x, next_y) not in self.last_positions and  # 避免最近走过的路
-                    self.is_path_clear(int(round(self.x)), int(round(self.y)), next_x, next_y)):
+                    (next_x, next_y) not in self.visited_cells):
                     
                     target_theta = math.atan2(dy, dx)
-                    print(f"随机移动到已访问位置 ({next_x}, {next_y})")
-                    self.update_position((next_x, next_y, target_theta))
-                    return True
+                    print(f"移动到未访问的邻居单元格 ({next_x}, {next_y})")
+                    if self.update_position((next_x, next_y, target_theta)):
+                        return True
             
-            print("随机移动失败，所有方向都被阻塞")
+            # 如果仍然无法移动，尝试移动到任何可行的邻居单元格
+            for dx, dy in self.directions:
+                next_x, next_y = current_x + dx, current_y + dy
+                if (0 < next_x < self.env.x_range - 1 and 
+                    0 < next_y < self.env.y_range - 1 and 
+                    (next_x, next_y) not in self.env.obstacles):
+                    
+                    target_theta = math.atan2(dy, dx)
+                    print(f"移动到任何可行的邻居单元格 ({next_x}, {next_y})")
+                    if self.update_position((next_x, next_y, target_theta)):
+                        return True
+            
+            print("无法执行随机移动，继续正常探索")
+            
+        # 更新传感器数据
+        self.update_sensor_data()
         
-        # 如果探索栈为空，寻找新的探索目标
+        # 更新边界单元格
+        self.update_frontier()
+        
+        # 如果探索栈为空，添加未探索的边界单元格
         if not self.exploration_stack:
-            # 获取未探索的边界单元格
-            frontier_cells = list(self.frontier - self.visited_cells - self.failed_targets)
+            # 获取未访问的边界单元格
+            unvisited_frontier = self.frontier - self.visited_cells - self.failed_targets
             
-            if frontier_cells:
-                # 找到距离当前位置最近的未探索单元格
+            if unvisited_frontier:
+                # 按照到当前位置的距离排序
                 current_pos = (int(round(self.x)), int(round(self.y)))
+                sorted_frontier = sorted(unvisited_frontier, 
+                                        key=lambda pos: abs(pos[0] - current_pos[0]) + abs(pos[1] - current_pos[1]))
                 
-                # 使用曼哈顿距离作为启发式
-                def manhattan_distance(p1, p2):
-                    return abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+                # 添加到探索栈
+                for pos in sorted_frontier[:min(10, len(sorted_frontier))]:  # 最多添加10个
+                    if pos not in self.exploration_stack and pos not in self.failed_targets:
+                        self.exploration_stack.append(pos)
+                        
+                print(f"添加了 {len(self.exploration_stack)} 个边界单元格到探索栈")
                 
-                # 按距离排序
-                frontier_cells.sort(key=lambda cell: manhattan_distance(cell, current_pos))
-                
-                # 选择最近的点
-                closest_unexplored = frontier_cells[0]
-                
-                # 使用A*算法规划从当前位置到目标位置的路径
-                a_star = AStar(start=current_pos, goal=closest_unexplored, env=self.env)
-                cost, path, _ = a_star.plan()
-                
-                if path and len(path) > 1:
-                    # 将路径加入探索栈（反向加入，这样可以从栈顶按顺序取出）
-                    for point in reversed(path[1:]):  # 跳过当前位置
-                        self.exploration_stack.append(point)
-                    print(f"规划到未探索区域 {closest_unexplored} 的路径，长度: {len(path)-1}")
-                else:
-                    # 如果无法规划路径，标记为失败的目标点
-                    self.failed_targets.add(closest_unexplored)
-                    print(f"无法规划到 {closest_unexplored} 的路径，标记为失败目标")
+                # 如果栈中有目标，尝试规划路径
+                if self.exploration_stack:
+                    target = self.exploration_stack[-1]  # 获取栈顶元素
+                    print(f"规划到未探索区域 {target} 的路径")
+                    
+                    # 使用A*算法规划路径
+                    current_pos = (int(round(self.x)), int(round(self.y)))
+                    a_star = AStar(start=current_pos, goal=target, env=self.env)
+                    cost, path, _ = a_star.plan()
+                    
+                    if path and len(path) > 1:
+                        print(f"找到路径，长度: {len(path)}")
+                        return True
+                    else:
+                        print(f"无法规划到 {target} 的路径，标记为失败目标")
+                        if target in self.exploration_stack:
+                            self.exploration_stack.remove(target)
+                        self.failed_targets.add(target)
+                        return True
             else:
-                # 所有边界都已探索或失败
-                print("所有可达边界都已探索完毕")
+                # 所有可达区域都已探索完毕
+                print("所有可达区域都已完整遍历！")
                 return False
         
         # 从栈中取出下一个目标点
@@ -296,7 +363,27 @@ class Robot:
                 
             # 检查是否可以直接移动到目标点
             current_x, current_y = int(round(self.x)), int(round(self.y))
-            if self.is_path_clear(current_x, current_y, next_pos[0], next_pos[1]):
+            
+            # 调试信息
+            print(f"当前位置: ({current_x}, {current_y}), 目标位置: {next_pos}")
+            
+            # 检查目标点是否是障碍物
+            if next_pos in self.env.obstacles:
+                print(f"警告：目标点 {next_pos} 是障碍物！标记为失败目标")
+                self.failed_targets.add(next_pos)
+                return True
+            
+            # 检查目标点是否在地图边缘
+            if next_pos[0] <= 0 or next_pos[1] <= 0 or next_pos[0] >= self.env.x_range - 1 or next_pos[1] >= self.env.y_range - 1:
+                print(f"警告：目标点 {next_pos} 在地图边缘，标记为失败目标")
+                self.failed_targets.add(next_pos)
+                return True
+            
+            # 检查路径是否通畅
+            is_clear = self.is_path_clear(current_x, current_y, next_pos[0], next_pos[1])
+            print(f"路径是否通畅: {is_clear}")
+            
+            if is_clear:
                 # 计算朝向
                 dx = next_pos[0] - current_x
                 dy = next_pos[1] - current_y
@@ -310,6 +397,8 @@ class Robot:
                     print(f"移动到 {next_pos} 失败")
                     # 如果移动失败，标记为失败目标
                     self.failed_targets.add(next_pos)
+                    # 尝试随机移动
+                    self.random_move_count = 5
             else:
                 print(f"到 {next_pos} 的路径被阻塞")
                 # 重新规划路径
@@ -333,14 +422,35 @@ class Robot:
                     else:
                         print(f"移动到 {next_step} 失败")
                         self.failed_targets.add(next_pos)
+                        # 尝试随机移动
+                        self.random_move_count = 5
                 else:
                     print(f"无法规划到 {next_pos} 的路径，标记为失败目标")
                     self.failed_targets.add(next_pos)
+                    
+                    # 尝试随机移动来摆脱困境
+                    self.random_move_count = 5
         
         # 如果栈为空且没有可探索的边界，则探索完成
         if not self.exploration_stack and not self.frontier - self.visited_cells - self.failed_targets:
-            print("迷宫探索完成")
-            return False
+            # 检查是否还有任何未访问的单元格
+            all_cells = set()
+            for x in range(1, self.env.x_range - 1):
+                for y in range(1, self.env.y_range - 1):
+                    if (x, y) not in self.env.obstacles:
+                        all_cells.add((x, y))
+            
+            unvisited_cells = all_cells - self.visited_cells - self.failed_targets
+            
+            if not unvisited_cells:
+                print("迷宫完整遍历完成！")
+                return False
+            else:
+                # 还有未访问的单元格，但可能无法到达
+                print(f"还有 {len(unvisited_cells)} 个单元格未访问，但可能无法到达")
+                # 标记这些单元格为失败目标，避免继续尝试
+                self.failed_targets.update(unvisited_cells)
+                return False
             
         return True
     
@@ -378,14 +488,14 @@ class Robot:
             
             # 检查最终路径是否到达目标
             if valid_path and valid_path[-1] == goal:
-                self.optimal_path = valid_path
+                self.goal_path = valid_path
                 print(f"找到到目标点的有效路径，长度: {len(valid_path)}")
                 return True
             else:
                 # 尝试使用更细致的路径规划
                 fine_path = self.find_fine_path(start, goal)
                 if fine_path:
-                    self.optimal_path = fine_path
+                    self.goal_path = fine_path
                     print(f"使用细致路径规划找到路径，长度: {len(fine_path)}")
                     return True
                 else:
@@ -543,12 +653,12 @@ class Robot:
     
     def navigate_to_goal(self):
         """沿着规划的路径导航到目标点"""
-        if not self.optimal_path or len(self.optimal_path) <= 1:
+        if not self.goal_path or len(self.goal_path) <= 1:
             print("没有可用的路径或已到达目标")
             return False
         
         # 获取下一个路径点
-        next_pos = self.optimal_path[1]  # 跳过当前位置
+        next_pos = self.goal_path[1]  # 跳过当前位置
         
         # 计算朝向
         current_x, current_y = int(round(self.x)), int(round(self.y))
@@ -559,31 +669,61 @@ class Robot:
         # 更新位置
         if self.update_position((next_pos[0], next_pos[1], target_theta)):
             # 更新路径
-            self.optimal_path = self.optimal_path[1:]
+            self.goal_path = self.goal_path[1:]
             return True
         else:
             print(f"导航到 {next_pos} 失败，重新规划路径")
             # 重新规划路径
             start = (current_x, current_y)
-            goal = self.optimal_path[-1]
+            goal = self.goal_path[-1]
             a_star = AStar(start=start, goal=goal, env=self.env)
             cost, path, _ = a_star.plan()
             
             if path and len(path) > 1:
-                self.optimal_path = path
+                self.goal_path = path
                 return True
             else:
                 print("无法重新规划路径")
                 return False
     
     def is_path_clear(self, x1, y1, x2, y2):
-        """检查从(x1,y1)到(x2,y2)的路径是否穿过障碍物"""
-        # 使用Bresenham算法检查路径上的每个点
-        points = self.bresenham_line(x1, y1, x2, y2)
-        for x, y in points:
+        """检查从(x1,y1)到(x2,y2)的路径是否通畅"""
+        # 如果是相邻的格子，直接检查目标格子是否是障碍物
+        if abs(x2 - x1) <= 1 and abs(y2 - y1) <= 1:
+            return (x2, y2) not in self.env.obstacles
+            
+        # 使用Bresenham算法检查路径上的每个格子
+        line = self.get_line(x1, y1, x2, y2)
+        
+        # 跳过起点和终点
+        for x, y in line[1:-1]:
             if (x, y) in self.env.obstacles:
                 return False
+                
         return True
+        
+    def get_line(self, x1, y1, x2, y2):
+        """使用Bresenham算法获取从(x1,y1)到(x2,y2)的线上的所有点"""
+        points = []
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
+        sx = 1 if x1 < x2 else -1
+        sy = 1 if y1 < y2 else -1
+        err = dx - dy
+        
+        while True:
+            points.append((x1, y1))
+            if x1 == x2 and y1 == y2:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x1 += sx
+            if e2 < dx:
+                err += dx
+                y1 += sy
+                
+        return points
     
     def bresenham_line(self, x0, y0, x1, y1):
         """Bresenham直线算法，返回从(x0,y0)到(x1,y1)的所有点"""
@@ -606,4 +746,71 @@ class Robot:
                 err += dx
                 y0 += sy
                 
-        return points 
+        return points
+    
+    def update_sensor_data(self):
+        """更新传感器数据"""
+        # 使用激光传感器扫描环境
+        self.sensor_data = self.sensor.scan((self.x, self.y, self.theta), self.env)
+        
+        # 更新已探索区域
+        current_x, current_y = int(round(self.x)), int(round(self.y))
+        
+        # 将当前位置标记为已访问
+        self.visited_cells.add((current_x, current_y))
+        
+        # 更新周围的探索区域（模拟视野）
+        vision_range = 2  # 视野范围
+        for dx in range(-vision_range, vision_range + 1):
+            for dy in range(-vision_range, vision_range + 1):
+                # 计算距离
+                dist = math.sqrt(dx**2 + dy**2)
+                if dist <= vision_range:
+                    nx, ny = current_x + dx, current_y + dy
+                    # 检查是否在地图范围内
+                    if 0 <= nx < self.env.x_range and 0 <= ny < self.env.y_range:
+                        # 只添加非障碍物区域
+                        if (nx, ny) not in self.env.obstacles:
+                            self.visited_cells.add((nx, ny))
+        
+        # 处理激光点
+        for point in self.sensor_data:
+            # 计算激光点的栅格坐标
+            grid_x, grid_y = int(round(point[0])), int(round(point[1]))
+            
+            # 将激光点标记为已探索
+            if 0 <= grid_x < self.env.x_range and 0 <= grid_y < self.env.y_range:
+                self.visited_cells.add((grid_x, grid_y))
+                
+                # 如果是障碍物，确保它在障碍物集合中
+                if (grid_x, grid_y) in self.env.obstacles:
+                    continue
+                
+                # 标记从机器人到激光点之间的所有点为已探索
+                points = self.get_line(int(round(self.x)), int(round(self.y)), grid_x, grid_y)
+                for px, py in points:
+                    if 0 <= px < self.env.x_range and 0 <= py < self.env.y_range:
+                        self.visited_cells.add((px, py))
+        
+        # 更新未探索的边界单元格
+        self.update_frontier()
+        
+        # 计算探索进度
+        total_cells = (self.env.x_range - 2) * (self.env.y_range - 2) - len(self.env.obstacles)
+        explored_cells = len(self.visited_cells - self.env.obstacles)
+        self.exploration_progress = explored_cells / total_cells * 100 if total_cells > 0 else 100
+        
+        # 更新迷宫格子状态
+        self.update_maze_cells()
+    
+    def update_frontier(self):
+        """更新边界单元格"""
+        self.frontier = set()
+        for cell in self.visited_cells:
+            for dx, dy in self.directions:
+                nx, ny = cell[0] + dx, cell[1] + dy
+                neighbor = (nx, ny)
+                if (0 <= nx < self.env.x_range and 0 <= ny < self.env.y_range and
+                    neighbor not in self.env.obstacles and
+                    neighbor not in self.visited_cells):
+                    self.frontier.add(neighbor) 

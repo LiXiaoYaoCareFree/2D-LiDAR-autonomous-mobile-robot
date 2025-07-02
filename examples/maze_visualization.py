@@ -145,15 +145,85 @@ class MazeVisualization:
         
     def update_visualization(self):
         """更新可视化"""
-        # 清除之前的激光线
-        for line in self.laser_lines:
-            line.remove() if hasattr(line, 'remove') else None
-        self.laser_lines = []
+        # 清除之前的绘图
+        self.ax1.clear()
+        self.ax2.clear()
         
-        # 添加新的激光线
-        for point in self.robot.laser_points:
-            line, = self.ax1.plot([self.robot.x, point[0]], [self.robot.y, point[1]], 'r-', alpha=0.3, linewidth=0.5)
-            self.laser_lines.append(line)
+        # 设置坐标轴范围
+        self.ax1.set_xlim(0, self.grid_env.x_range)
+        self.ax1.set_ylim(0, self.grid_env.y_range)
+        self.ax2.set_xlim(0, self.grid_env.x_range)
+        self.ax2.set_ylim(0, self.grid_env.y_range)
+        
+        # 绘制障碍物
+        for obs in self.grid_env.obstacles:
+            self.ax1.add_patch(Rectangle((obs[0] - 0.5, obs[1] - 0.5), 1, 1, color='black'))
+            self.ax2.add_patch(Rectangle((obs[0] - 0.5, obs[1] - 0.5), 1, 1, color='black'))
+        
+        # 绘制起点和终点
+        self.ax1.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=10)  # 绿色起点
+        self.ax1.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)    # 红色终点
+        self.ax2.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=10)  # 绿色起点
+        self.ax2.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)    # 红色终点
+        
+        # 绘制机器人位置
+        self.ax1.plot(self.robot.x, self.robot.y, 'bo', markersize=8)  # 蓝色机器人
+        self.ax2.plot(self.robot.x, self.robot.y, 'bo', markersize=8)  # 蓝色机器人
+        
+        # 绘制机器人朝向
+        direction_length = 1.0
+        dx = direction_length * math.cos(self.robot.theta)
+        dy = direction_length * math.sin(self.robot.theta)
+        self.ax1.arrow(self.robot.x, self.robot.y, dx, dy, head_width=0.3, head_length=0.3, fc='blue', ec='blue')
+        
+        # 绘制激光传感器数据
+        if hasattr(self.robot, 'sensor_data') and self.robot.sensor_data:
+            for point in self.robot.sensor_data:
+                self.ax1.plot([self.robot.x, point[0]], [self.robot.y, point[1]], 'y-', alpha=0.3)  # 黄色激光线
+                self.ax1.plot(point[0], point[1], 'rx', markersize=3)  # 红色激光点
+        
+        # 绘制已探索区域
+        if hasattr(self.robot, 'visited_cells'):
+            for cell in self.robot.visited_cells:
+                if cell not in self.grid_env.obstacles:
+                    self.ax2.add_patch(Rectangle((cell[0] - 0.5, cell[1] - 0.5), 1, 1, color='lightblue', alpha=0.5))
+        
+        # 绘制边界单元格
+        if hasattr(self.robot, 'frontier'):
+            for cell in self.robot.frontier:
+                if cell not in self.robot.visited_cells and cell not in self.grid_env.obstacles:
+                    self.ax2.add_patch(Rectangle((cell[0] - 0.5, cell[1] - 0.5), 1, 1, color='yellow', alpha=0.3))
+        
+        # 绘制规划的路径
+        if hasattr(self, 'current_state') and self.current_state in ["navigation", "navigate_to_goal"] and hasattr(self.robot, 'goal_path') and self.robot.goal_path:
+            path_x = [p[0] for p in self.robot.goal_path]
+            path_y = [p[1] for p in self.robot.goal_path]
+            self.ax2.plot(path_x, path_y, 'g-', linewidth=2)  # 绿色路径线
+        
+        # 添加标题
+        self.ax1.set_title('机器人视角')
+        if hasattr(self, 'current_state'):
+            if self.current_state == "exploration":
+                self.ax2.set_title(f'迷宫地图 - 探索阶段 ({self.robot.exploration_progress:.1f}%)')
+            elif self.current_state == "search_goal":
+                self.ax2.set_title('迷宫地图 - 搜索目标点阶段')
+            elif self.current_state == "navigate_to_goal":
+                self.ax2.set_title('迷宫地图 - 导航到目标点阶段')
+            elif self.current_state == "path_planning":
+                self.ax2.set_title('迷宫地图 - 规划返回路径阶段')
+            elif self.current_state == "navigation":
+                self.ax2.set_title('迷宫地图 - 返回起点阶段')
+            elif self.current_state == "completed":
+                self.ax2.set_title('迷宫地图 - 探索完成')
+        else:
+            self.ax2.set_title('迷宫地图')
+        
+        # 添加网格
+        self.ax1.grid(True)
+        self.ax2.grid(True)
+        
+        # 更新画布
+        self.fig.canvas.draw()
         
         # 更新机器人位置和方向
         self.robot_marker1.set_data([self.robot.x], [self.robot.y])
@@ -170,49 +240,67 @@ class MazeVisualization:
             self.path_line1.set_data(path_x, path_y)
             self.path_line2.set_data(path_x, path_y)
         
-        # 更新探索地图
-        if hasattr(self, 'explored_scatter'):
-            self.explored_scatter.remove()
+        # 更新探索地图 - 使用try-except处理可能的错误
+        try:
+            if hasattr(self, 'explored_scatter'):
+                self.explored_scatter.remove()
+        except:
+            pass  # 如果无法移除，就忽略错误
         
-        if self.robot.explored_map:
-            explored_x, explored_y = zip(*self.robot.explored_map)
+        if hasattr(self.robot, 'visited_cells') and self.robot.visited_cells:
+            explored_x, explored_y = zip(*self.robot.visited_cells)
             self.explored_scatter = self.ax2.scatter(explored_x, explored_y, c='lightblue', s=5, alpha=0.8)
         
-        # 更新迷宫格子状态
-        # 清除之前的格子状态
-        if hasattr(self, 'unknown_cells_scatter'):
-            self.unknown_cells_scatter.remove()
-        if hasattr(self, 'path_cells_scatter'):
-            self.path_cells_scatter.remove()
+        # 更新迷宫格子状态 - 使用try-except处理可能的错误
+        try:
+            if hasattr(self, 'unknown_cells_scatter'):
+                self.unknown_cells_scatter.remove()
+        except:
+            pass  # 如果无法移除，就忽略错误
             
-        # 显示未知区域（灰色）
-        unknown_cells = [(x, y) for (x, y), status in self.robot.maze_cells.items() if status == 0]
-        if unknown_cells:
-            unknown_x, unknown_y = zip(*unknown_cells)
-            self.unknown_cells_scatter = self.ax2.scatter(unknown_x, unknown_y, c='lightgray', s=5, alpha=0.5)
+        try:
+            if hasattr(self, 'path_cells_scatter'):
+                self.path_cells_scatter.remove()
+        except:
+            pass  # 如果无法移除，就忽略错误
             
-        # 显示已探索的通路（蓝色）
-        path_cells = [(x, y) for (x, y), status in self.robot.maze_cells.items() if status == 1]
-        if path_cells:
-            path_x, path_y = zip(*path_cells)
-            self.path_cells_scatter = self.ax2.scatter(path_x, path_y, c='lightblue', s=5, alpha=0.8)
+        # 显示未知区域（灰色）和通路（浅蓝色）
+        if hasattr(self.robot, 'maze_cells'):
+            try:
+                # 显示未知区域（灰色）
+                unknown_cells = [(x, y) for (x, y), status in self.robot.maze_cells.items() if status == 0]
+                if unknown_cells:
+                    unknown_x, unknown_y = zip(*unknown_cells)
+                    self.unknown_cells_scatter = self.ax2.scatter(unknown_x, unknown_y, c='lightgray', s=5, alpha=0.5)
+                
+                # 显示通路（浅蓝色）
+                path_cells = [(x, y) for (x, y), status in self.robot.maze_cells.items() if status == 1]
+                if path_cells:
+                    path_x, path_y = zip(*path_cells)
+                    self.path_cells_scatter = self.ax2.scatter(path_x, path_y, c='lightblue', s=5, alpha=0.8)
+            except Exception as e:
+                print(f"处理maze_cells时出错: {e}")
         
         # 更新最优路径
-        if self.robot.optimal_path:
-            path_x, path_y = zip(*self.robot.optimal_path)
+        if hasattr(self.robot, 'goal_path') and self.robot.goal_path:
+            path_x, path_y = zip(*self.robot.goal_path)
             self.optimal_path_line1.set_data(path_x, path_y)
             self.optimal_path_line2.set_data(path_x, path_y)
         
         # 更新阴影
-        for pos in self.robot.explored_map:
-            if 0 <= pos[0] < self.grid_env.x_range and 0 <= pos[1] < self.grid_env.y_range:
-                self.unexplored[pos[0], pos[1]] = 0
+        if hasattr(self.robot, 'visited_cells'):
+            for pos in self.robot.visited_cells:
+                if 0 <= pos[0] < self.grid_env.x_range and 0 <= pos[1] < self.grid_env.y_range:
+                    self.unexplored[pos[0], pos[1]] = 0
         
         self.shadow.set_data(self.unexplored.T)
         
         # 计算探索进度
         total_cells = (self.grid_env.x_range - 2) * (self.grid_env.y_range - 2) - len(self.grid_env.obstacles)
-        explored_cells = len(self.robot.explored_map)
+        if hasattr(self.robot, 'visited_cells'):
+            explored_cells = len(self.robot.visited_cells)
+        else:
+            explored_cells = 0
         explored_percent = explored_cells / total_cells * 100 if total_cells > 0 else 0
         
         # 计算到目标的距离
@@ -248,16 +336,21 @@ class MazeVisualization:
         self.current_state = maze_exploration.current_state
         self.exploration_start_time = time.time()
         
-        # 创建动画
-        self.anim = FuncAnimation(
-            self.fig, 
-            lambda frame: maze_exploration.update(self),
-            frames=None,  # 无限帧
-            interval=50,  # 每50毫秒更新一次
-            repeat=False,
-            blit=False,
-            cache_frame_data=False  # 避免缓存警告
-        )
-        
-        # 显示图形
-        plt.show(block=True) 
+        try:
+            # 创建动画
+            self.anim = FuncAnimation(
+                self.fig, 
+                lambda frame: maze_exploration.update(self),
+                frames=None,  # 无限帧
+                interval=50,  # 每50毫秒更新一次
+                repeat=False,
+                blit=False,
+                cache_frame_data=False  # 避免缓存警告
+            )
+            
+            # 显示图形
+            plt.show(block=True)
+        except Exception as e:
+            print(f"动画运行出错: {e}")
+            import traceback
+            traceback.print_exc() 

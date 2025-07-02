@@ -2,92 +2,104 @@
 # -*- coding: utf-8 -*-
 
 """
-迷宫传感器模块
-包含激光传感器的实现
+激光传感器模块
+提供激光传感器类，用于模拟机器人的激光雷达传感器
 """
 
+import math
 import numpy as np
 
 class LaserSensor:
-    """激光传感器"""
-    def __init__(self, env, range_max=5.0, angle_min=-np.pi/2, angle_max=np.pi/2, angle_increment=np.pi/180):
-        self.env = env
-        self.range_max = range_max  # 最大测量距离
-        self.angle_min = angle_min  # 最小角度
-        self.angle_max = angle_max  # 最大角度
-        self.angle_increment = angle_increment  # 角度增量
-        self.angles = np.arange(angle_min, angle_max + angle_increment, angle_increment)
+    """激光传感器类，模拟激光雷达"""
     
-    def scan(self, pose):
-        """扫描环境，返回激光点的坐标"""
+    def __init__(self, max_range=5.0, num_rays=36):
+        """初始化激光传感器
+        
+        参数:
+            max_range: 激光的最大探测范围
+            num_rays: 激光束的数量
+        """
+        self.max_range = max_range
+        self.num_rays = num_rays
+        
+    def scan(self, pose, env):
+        """扫描环境，返回激光点的坐标
+        
+        参数:
+            pose: 机器人的位置和朝向 (x, y, theta)
+            env: 环境对象，包含障碍物信息
+            
+        返回:
+            激光点的坐标列表
+        """
         x, y, theta = pose
         laser_points = []
         
-        for angle in self.angles:
-            # 计算激光束的全局角度
-            global_angle = theta + angle
-            
-            # 初始化激光束终点
-            end_x = x + self.range_max * np.cos(global_angle)
-            end_y = y + self.range_max * np.sin(global_angle)
-            
-            # 检查激光束是否与障碍物相交
-            min_dist = self.range_max
-            
-            # 遍历所有可能的障碍物
-            for obs_x in range(max(0, int(x - self.range_max - 1)), min(self.env.x_range, int(x + self.range_max + 1))):
-                for obs_y in range(max(0, int(y - self.range_max - 1)), min(self.env.y_range, int(y + self.range_max + 1))):
-                    if (obs_x, obs_y) in self.env.obstacles:
-                        # 计算障碍物的四个角点
-                        corners = [
-                            (obs_x - 0.5, obs_y - 0.5),
-                            (obs_x + 0.5, obs_y - 0.5),
-                            (obs_x + 0.5, obs_y + 0.5),
-                            (obs_x - 0.5, obs_y + 0.5)
-                        ]
-                        
-                        # 检查激光束是否与障碍物相交
-                        for i in range(4):
-                            x1, y1 = corners[i]
-                            x2, y2 = corners[(i + 1) % 4]
-                            
-                            # 检查线段相交
-                            intersection = self.line_intersection((x, y), (end_x, end_y), (x1, y1), (x2, y2))
-                            if intersection:
-                                ix, iy = intersection
-                                # 计算距离
-                                dist = np.sqrt((ix - x) ** 2 + (iy - y) ** 2)
-                                if dist < min_dist:
-                                    min_dist = dist
-                                    end_x = ix
-                                    end_y = iy
-            
-            # 添加激光点
-            laser_points.append((end_x, end_y))
+        # 计算每个激光束的角度
+        angles = np.linspace(theta - math.pi, theta + math.pi, self.num_rays)
         
+        for angle in angles:
+            # 计算激光束的终点
+            end_x = x + self.max_range * math.cos(angle)
+            end_y = y + self.max_range * math.sin(angle)
+            
+            # 使用射线检测找到最近的障碍物
+            hit_point = self._ray_cast(x, y, end_x, end_y, env)
+            if hit_point:
+                laser_points.append(hit_point)
+                
         return laser_points
     
-    def line_intersection(self, p1, p2, p3, p4):
-        """计算两条线段的交点"""
-        x1, y1 = p1
-        x2, y2 = p2
-        x3, y3 = p3
-        x4, y4 = p4
+    def _ray_cast(self, x1, y1, x2, y2, env):
+        """射线检测，找到从(x1,y1)到(x2,y2)的射线与障碍物的交点
         
-        # 计算分母
-        denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1)
-        if denom == 0:
-            return None  # 平行线
+        参数:
+            x1, y1: 射线起点
+            x2, y2: 射线终点
+            env: 环境对象，包含障碍物信息
+            
+        返回:
+            如果有交点，返回交点坐标；否则返回射线终点
+        """
+        # 使用Bresenham算法获取射线上的所有点
+        line_points = self._bresenham_line(int(round(x1)), int(round(y1)), 
+                                          int(round(x2)), int(round(y2)))
         
-        # 计算参数
-        ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom
-        ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom
+        # 检查射线上的每个点是否是障碍物
+        for x, y in line_points:
+            if (x, y) in env.obstacles:
+                return (x, y)
+                
+        # 如果没有交点，返回射线终点
+        return (x2, y2)
+    
+    def _bresenham_line(self, x0, y0, x1, y1):
+        """Bresenham算法，获取从(x0,y0)到(x1,y1)的线上的所有点
         
-        # 检查参数是否在[0,1]范围内
-        if 0 <= ua <= 1 and 0 <= ub <= 1:
-            # 计算交点
-            x = x1 + ua * (x2 - x1)
-            y = y1 + ua * (y2 - y1)
-            return (x, y)
+        参数:
+            x0, y0: 线的起点
+            x1, y1: 线的终点
+            
+        返回:
+            线上的所有点的坐标列表
+        """
+        points = []
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
         
-        return None  # 不相交 
+        while True:
+            points.append((x0, y0))
+            if x0 == x1 and y0 == y1:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
+                
+        return points 
