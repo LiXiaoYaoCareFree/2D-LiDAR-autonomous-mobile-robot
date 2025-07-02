@@ -284,8 +284,8 @@ class Robot:
             self.update_frontier()
             
         # 如果已经探索了大部分区域，检查是否可以直接前往终点
-        if self.exploration_progress > 80.0 and self.env.goal is not None:
-            goal_cell = (int(round(self.env.goal[0])), int(round(self.env.goal[1])))
+        if self.exploration_progress > 80.0 and hasattr(self.env, 'goal_pos') and self.env.goal_pos is not None:
+            goal_cell = (int(round(self.env.goal_pos[0])), int(round(self.env.goal_pos[1])))
             current_cell = (int(round(self.x)), int(round(self.y)))
             
             # 如果终点已知且未被标记为失败目标，尝试规划到终点的路径
@@ -506,24 +506,26 @@ class Robot:
         return processed_path
     
     def navigate_to_goal(self):
-        """沿着规划的路径导航到目标"""
-        if not self.goal_path or len(self.goal_path) <= 1:
-            print("没有规划的路径或已经到达目标")
+        """沿着已规划的路径导航到目标"""
+        # 如果没有路径，无法导航
+        if not self.goal_path or len(self.goal_path) < 2:
+            print("没有有效的导航路径")
             return False
         
-        # 当前位置
+        # 获取当前位置
         current_x, current_y = int(round(self.x)), int(round(self.y))
         current_pos = (current_x, current_y)
         
         # 检查当前位置是否在路径上
         if current_pos not in self.goal_path:
             print(f"当前位置 {current_pos} 不在规划的路径上，寻找最近的路径点")
-            # 寻找路径上最近的点
-            closest_idx = 0
+            
+            # 寻找最近的路径点
             min_dist = float('inf')
+            closest_idx = 0
             
             for i, pos in enumerate(self.goal_path):
-                dist = abs(pos[0] - current_x) + abs(pos[1] - current_y)
+                dist = abs(pos[0] - current_x) + abs(pos[1] - current_y)  # 曼哈顿距离
                 if dist < min_dist:
                     min_dist = dist
                     closest_idx = i
@@ -537,20 +539,71 @@ class Robot:
                     print("已经到达目标点附近")
                     return False
             else:
-                # 如果最近的点也很远，重新规划路径
-                print("最近的路径点也很远，需要重新规划路径")
+                # 如果最近的点也很远，尝试直接移动到目标方向
+                print("最近的路径点也很远，尝试直接移动到目标方向")
+                goal = self.goal_path[-1]  # 目标位置
+                dx = goal[0] - current_x
+                dy = goal[1] - current_y
+                
+                # 确定主要移动方向
+                if abs(dx) > abs(dy):
+                    # 水平方向移动
+                    next_x = current_x + (1 if dx > 0 else -1)
+                    next_y = current_y
+                else:
+                    # 垂直方向移动
+                    next_x = current_x
+                    next_y = current_y + (1 if dy > 0 else -1)
+                
+                next_pos = (next_x, next_y)
+                
+                # 检查下一个位置是否可行
+                if (0 <= next_x < self.env.x_range and 
+                    0 <= next_y < self.env.y_range and 
+                    next_pos not in self.env.obstacles):
+                    
+                    # 计算朝向
+                    target_theta = math.atan2(next_y - current_y, next_x - current_x)
+                    
+                    # 移动到下一个位置
+                    if self.update_position((next_x, next_y, target_theta)):
+                        print(f"直接移动到 {next_pos}")
+                        return True
+                
+                # 如果直接移动失败，重新规划路径
                 return False
-        
-        # 获取路径中的当前位置索引
-        current_index = self.goal_path.index(current_pos)
-        
-        # 检查是否已经到达目标
-        if current_index == len(self.goal_path) - 1:
-            print("已经到达目标点")
-            return False
-        
-        # 获取下一个位置
-        next_pos = self.goal_path[current_index + 1]
+            
+            # 获取下一个位置
+            next_pos = self.goal_path[1]  # 使用第二个点作为下一个位置
+        else:
+            # 获取路径中的当前位置索引
+            try:
+                current_index = self.goal_path.index(current_pos)
+                
+                # 检查是否已经到达目标
+                if current_index == len(self.goal_path) - 1:
+                    print("已经到达目标点")
+                    return False
+                
+                # 获取下一个位置
+                next_pos = self.goal_path[current_index + 1]
+            except ValueError:
+                # 如果当前位置不在路径中（可能由于浮点数精度问题），找最近的点
+                print(f"无法在路径中找到当前位置 {current_pos}，寻找最近的点")
+                min_dist = float('inf')
+                closest_idx = 0
+                
+                for i, pos in enumerate(self.goal_path):
+                    dist = abs(pos[0] - current_x) + abs(pos[1] - current_y)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_idx = i
+                
+                if closest_idx < len(self.goal_path) - 1:
+                    next_pos = self.goal_path[closest_idx + 1]
+                else:
+                    print("已经到达路径末尾")
+                    return False
         
         # 检查下一个位置是否是相邻的单元格
         dx = next_pos[0] - current_x
@@ -560,8 +613,9 @@ class Robot:
         if (dx, dy) not in self.directions:
             print(f"下一个位置 {next_pos} 不是上下左右四个方向之一，跳过该点")
             # 跳过这个点，尝试下一个点
-            if current_index + 2 < len(self.goal_path):
-                next_pos = self.goal_path[current_index + 2]
+            current_index = self.goal_path.index(next_pos)
+            if current_index + 1 < len(self.goal_path):
+                next_pos = self.goal_path[current_index + 1]
                 dx = next_pos[0] - current_x
                 dy = next_pos[1] - current_y
                 if (dx, dy) not in self.directions:

@@ -24,6 +24,9 @@ class MazeExploration:
         # 创建机器人
         self.robot = Robot(self.maze_env.start_pos, self.maze_env.grid_env)
         
+        # 创建可视化
+        self.visualizer = MazeVisualization(self.maze_env, self.robot)
+        
         # 设置状态
         self.exploration_complete = False
         self.path_planning_complete = False
@@ -48,6 +51,10 @@ class MazeExploration:
         
         # 标记是否已返回起点
         self.returned_to_start = False
+        
+        # 导航失败重试次数
+        self.navigation_retry_count = 0
+        self.max_navigation_retries = 10  # 最大重试次数
         
     def update(self, visualization):
         """更新一帧"""
@@ -146,11 +153,23 @@ class MazeExploration:
                 print("到达目标点！")
                 self.reached_goal = True
                 self.current_state = "path_planning"
+                # 重置导航重试计数
+                self.navigation_retry_count = 0
                 return
                 
             # 沿着规划的路径导航
             if not self.robot.navigate_to_goal():
                 print("导航失败，重新规划路径...")
+                self.navigation_retry_count += 1
+                
+                if self.navigation_retry_count >= self.max_navigation_retries:
+                    print(f"导航失败次数达到最大值({self.max_navigation_retries})，放弃导航")
+                    # 直接进入下一阶段
+                    self.reached_goal = True
+                    self.current_state = "path_planning"
+                    self.navigation_retry_count = 0
+                    return
+                
                 if self.robot.find_path_to_goal(self.maze_env.goal_pos):
                     print("重新规划路径成功")
                 else:
@@ -185,6 +204,16 @@ class MazeExploration:
             # 沿着规划的路径导航
             if not self.robot.navigate_to_goal():
                 print("导航失败，重新规划路径...")
+                self.navigation_retry_count += 1
+                
+                if self.navigation_retry_count >= self.max_navigation_retries:
+                    print(f"导航失败次数达到最大值({self.max_navigation_retries})，放弃导航")
+                    # 直接完成任务
+                    self.returned_to_start = True
+                    self.current_state = "completed"
+                    visualization.exploration_paused = True
+                    return
+                
                 if self.robot.find_path_to_goal(self.maze_env.start_pos):
                     print("重新规划路径成功")
                 else:
