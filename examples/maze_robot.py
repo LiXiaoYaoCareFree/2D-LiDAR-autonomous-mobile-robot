@@ -63,9 +63,16 @@ class Robot:
         # 探索进度
         self.exploration_progress = 0.0
         
+        # 添加更新计数器
+        self.update_count = 0
+        
+        # 计算并缓存可访问单元格的总数
+        self.accessible_cells_count = self._calculate_accessible_cells()
+        
         # 调试信息
         print(f"机器人初始化在位置 ({self.x}, {self.y})")
         print(f"环境大小: {self.env.x_range}x{self.env.y_range}")
+        print(f"可访问单元格总数: {self.accessible_cells_count}")
         
         # 添加迷宫格子探索相关参数
         self.maze_cells = {}  # 用于记录迷宫的每个格子的状态：0=未知，1=通路，2=墙壁
@@ -78,6 +85,15 @@ class Robot:
         # 设置初始移动方向
         self.first_move_done = False
         
+    def _calculate_accessible_cells(self):
+        """计算地图中的可访问单元格总数（排除障碍物）"""
+        accessible_cells = 0
+        for x in range(self.env.x_range):
+            for y in range(self.env.y_range):
+                if (x, y) not in self.env.obstacles:
+                    accessible_cells += 1
+        return accessible_cells
+    
     def initialize_maze_cells(self):
         """初始化迷宫格子状态"""
         # 将整个环境划分为格子
@@ -179,15 +195,23 @@ class Robot:
         # 打印移动信息
         print(f"机器人从 ({old_x:.1f}, {old_y:.1f}) 移动到 ({self.x:.1f}, {self.y:.1f})")
         
-        # 更新探索进度
-        total_cells = (self.env.x_range - 2) * (self.env.y_range - 2) - len(self.env.obstacles)
+        # 更新探索进度 - 使用缓存的可访问单元格总数
         explored_cells = len(self.visited_cells)
-        self.exploration_progress = explored_cells / total_cells * 100 if total_cells > 0 else 0
+        
+        # 计算探索进度百分比，限制最大值为99.9%，确保不会过早达到100%
+        if self.accessible_cells_count > 0:
+            progress = (explored_cells / self.accessible_cells_count) * 100
+            self.exploration_progress = min(progress, 99.9)
+        else:
+            self.exploration_progress = 0
         
         return True
     
     def scan_environment(self):
         """使用激光雷达扫描环境，更新探索地图"""
+        # 递增更新计数器
+        self.update_count += 1
+        
         # 使用激光传感器扫描环境
         self.sensor_data = self.sensor.scan((self.x, self.y, self.theta), self.env)
         
@@ -229,10 +253,22 @@ class Robot:
         # 更新未探索的边界单元格
         self.update_frontier_cells()
         
-        # 计算探索进度
-        total_cells = (self.env.x_range - 2) * (self.env.y_range - 2) - len(self.env.obstacles)
-        explored_cells = len(self.visited_cells - self.env.obstacles)
-        self.exploration_progress = explored_cells / total_cells * 100 if total_cells > 0 else 100
+        # 计算探索进度 - 使用缓存的可访问单元格总数
+        explored_cells = len(self.visited_cells)
+        
+        # 计算探索进度百分比，限制最大值为99.9%，确保不会过早达到100%
+        if self.accessible_cells_count > 0:
+            progress = (explored_cells / self.accessible_cells_count) * 100
+            self.exploration_progress = min(progress, 99.9)
+        else:
+            self.exploration_progress = 0
+        
+        # 打印详细的探索统计信息
+        if self.update_count % 20 == 0:  # 每20次更新打印一次统计信息
+            print(f"探索统计: 已探索 {explored_cells} 个单元格，可访问单元格总数 {self.accessible_cells_count}")
+            print(f"当前探索进度: {self.exploration_progress:.2f}%")
+            print(f"边界单元格数量: {len(self.frontier)}")
+            print(f"未探索区域比例: {(self.accessible_cells_count - explored_cells) / self.accessible_cells_count * 100:.2f}%")
         
         # 更新迷宫格子状态
         self.update_maze_cells()
@@ -296,6 +332,54 @@ class Robot:
                 if path:
                     print(f"找到到终点的路径，长度: {len(path)}")
                     self.goal_path = path[1:]  # 跳过起点
+                    return True
+        
+        # 优先尝试沿着当前前进方向继续探索
+        current_cell = (int(round(self.x)), int(round(self.y)))
+        forward_cell = (current_cell[0] + self.forward_direction[0], 
+                        current_cell[1] + self.forward_direction[1])
+        
+        # 检查前方单元格是否可行
+        if (0 < forward_cell[0] < self.env.x_range - 1 and 
+            0 < forward_cell[1] < self.env.y_range - 1 and 
+            forward_cell not in self.env.obstacles and
+            forward_cell not in self.visited_cells):
+            
+            print(f"沿着当前方向 {self.forward_direction} 继续探索到 {forward_cell}")
+            self.update_position((forward_cell[0], forward_cell[1], 
+                                 math.atan2(self.forward_direction[1], self.forward_direction[0])))
+            return True
+            
+        # 尝试查看前方稍微偏离的方向
+        for angle_offset in [0, math.pi/4, -math.pi/4, math.pi/2, -math.pi/2]:
+            if angle_offset == 0:
+                continue  # 已经检查过正前方了
+                
+            # 计算偏移后的方向
+            current_angle = math.atan2(self.forward_direction[1], self.forward_direction[0])
+            new_angle = current_angle + angle_offset
+            new_dx = round(math.cos(new_angle))
+            new_dy = round(math.sin(new_angle))
+            
+            # 确保是单位向量
+            if abs(new_dx) + abs(new_dy) == 2:  # 对角线方向
+                if random.random() < 0.5:
+                    new_dx = 0
+                else:
+                    new_dy = 0
+                    
+            if (new_dx, new_dy) in self.directions:  # 确保是上下左右四个方向之一
+                new_cell = (current_cell[0] + new_dx, current_cell[1] + new_dy)
+                
+                if (0 < new_cell[0] < self.env.x_range - 1 and 
+                    0 < new_cell[1] < self.env.y_range - 1 and 
+                    new_cell not in self.env.obstacles and
+                    new_cell not in self.visited_cells):
+                    
+                    print(f"沿着偏移方向 ({new_dx}, {new_dy}) 探索到 {new_cell}")
+                    self.update_position((new_cell[0], new_cell[1], new_angle))
+                    # 更新前进方向
+                    self.forward_direction = (new_dx, new_dy)
                     return True
         
         # 移动到下一个目标
@@ -745,6 +829,8 @@ class Robot:
                     if next_cell not in self.visited_cells:
                         print(f"随机移动到未访问的单元格 {next_cell}")
                         self.update_position((next_x, next_y, math.atan2(dy, dx)))
+                        # 更新前进方向
+                        self.forward_direction = (dx, dy)
                         return True
                     
                     valid_moves.append((next_x, next_y, math.atan2(dy, dx)))
@@ -754,6 +840,11 @@ class Robot:
                 next_pos = valid_moves[0]  # 选择第一个（优先级最高的）
                 print(f"随机移动到 {(next_pos[0], next_pos[1])}")
                 self.update_position(next_pos)
+                # 更新前进方向
+                dx = next_pos[0] - current_cell[0]
+                dy = next_pos[1] - current_cell[1]
+                if abs(dx) + abs(dy) == 1:  # 确保是单位向量
+                    self.forward_direction = (dx, dy)
                 return True
             else:
                 print("没有有效的随机移动")
@@ -774,8 +865,17 @@ class Robot:
                 return False
             
             # 更新位置
-            self.update_position((next_point[0], next_point[1], self.theta))
-            return True
+            current_cell = (int(round(self.x)), int(round(self.y)))
+            dx = next_point[0] - current_cell[0]
+            dy = next_point[1] - current_cell[1]
+            target_theta = math.atan2(dy, dx)
+            
+            if self.update_position((next_point[0], next_point[1], target_theta)):
+                # 更新前进方向
+                if abs(dx) + abs(dy) == 1:  # 确保是单位向量
+                    self.forward_direction = (dx, dy)
+                return True
+            return False
             
         # 如果没有目标路径，但有探索栈，规划到栈顶目标的路径
         elif self.exploration_stack:
@@ -787,7 +887,30 @@ class Robot:
             # 如果已经到达目标，弹出栈顶
             if current_cell == target:
                 self.exploration_stack.pop()
-                return self.move_to_next_target()  # 递归调用，移动到下一个目标
+                # 立即尝试沿着当前方向继续探索，而不是递归调用
+                # 检查前方单元格是否可行
+                forward_cell = (current_cell[0] + self.forward_direction[0], 
+                               current_cell[1] + self.forward_direction[1])
+                
+                if (0 < forward_cell[0] < self.env.x_range - 1 and 
+                    0 < forward_cell[1] < self.env.y_range - 1 and 
+                    forward_cell not in self.env.obstacles and
+                    forward_cell not in self.visited_cells):
+                    
+                    print(f"到达目标后，继续沿着当前方向 {self.forward_direction} 探索到 {forward_cell}")
+                    self.update_position((forward_cell[0], forward_cell[1], 
+                                         math.atan2(self.forward_direction[1], self.forward_direction[0])))
+                    return True
+                
+                # 如果前方不可行，再尝试移动到下一个目标
+                if self.exploration_stack:
+                    return self.move_to_next_target()  # 递归调用，移动到下一个目标
+                else:
+                    # 如果栈为空，更新边界并添加新目标
+                    self.update_frontier()
+                    added = self.add_frontier_to_stack()
+                    if added > 0:
+                        return self.move_to_next_target()
                 
             # 规划到目标的路径
             path = self.plan_path(current_cell, target)
@@ -884,8 +1007,8 @@ class Robot:
             else:
                 direction_similarity = 0
                 
-            # 综合得分：方向相似度优先，距离其次
-            score = direction_similarity * 10 - distance
+            # 大幅提高方向相似度的权重，确保优先沿着当前方向探索
+            score = direction_similarity * 20 - distance
             
             # 如果是已访问过的单元格的邻居，降低其优先级
             visited_neighbors = 0
@@ -894,22 +1017,25 @@ class Robot:
                 if neighbor in self.visited_cells:
                     visited_neighbors += 1
             
-            # 如果周围已访问单元格太多，降低优先级
-            score -= visited_neighbors * 0.5
+            # 如果周围已访问单元格太多，大幅降低优先级
+            score -= visited_neighbors * 1.0
             
             frontier_scores.append((score, cell))
             
         # 按得分从高到低排序
         frontier_scores.sort(reverse=True)
         
-        # 选择得分最高的几个边界单元格添加到探索栈
+        # 选择得分最高的边界单元格添加到探索栈
+        # 修改为只添加一个得分最高的单元格，确保机器人专注于一条路径
         added_count = 0
-        for _, cell in frontier_scores[:3]:  # 最多添加3个
-            if cell not in self.exploration_stack and cell not in self.failed_targets:
-                self.exploration_stack.append(cell)
+        if frontier_scores:
+            best_cell = frontier_scores[0][1]
+            if best_cell not in self.exploration_stack and best_cell not in self.failed_targets:
+                self.exploration_stack.append(best_cell)
                 added_count += 1
+                print(f"添加边界单元格 {best_cell} 到探索栈，优先沿着当前方向探索")
                 
-        return added_count 
+        return added_count
 
     def plan_path(self, start, goal):
         """使用A*算法规划从起点到目标的路径"""

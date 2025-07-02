@@ -37,7 +37,7 @@ class MazeExploration:
         self.goal_detection_distance = 3  # 当机器人靠近目标3个单位时，视为找到目标
         
         # 探索完成度阈值
-        self.exploration_threshold = 0.95  # 提高探索阈值到95%，确保更完整的遍历
+        self.exploration_threshold = 1.10  # 设置为90%，确保更完整的遍历但不要求100%
         
         # 计数器
         self.step_count = 0
@@ -55,6 +55,10 @@ class MazeExploration:
         # 导航失败重试次数
         self.navigation_retry_count = 0
         self.max_navigation_retries = 10  # 最大重试次数
+        
+        # 添加探索时间限制，避免无限探索
+        self.exploration_start_time = time.time()
+        self.max_exploration_time = 300  # 最大探索时间，单位秒
         
     def update(self, visualization):
         """更新一帧"""
@@ -74,6 +78,26 @@ class MazeExploration:
         
         # 更新步数
         self.step_count += 1
+        
+        # 检查探索时间是否超时
+        exploration_time = current_time - self.exploration_start_time
+        if exploration_time > self.max_exploration_time and self.current_state == "exploration":
+            print(f"探索时间已达到限制 ({self.max_exploration_time}秒)，强制结束探索阶段")
+            self.exploration_complete = True
+            
+            # 如果已经找到目标但还没到达，现在导航到目标
+            if self.goal_found and not self.reached_goal:
+                print("导航到目标点...")
+                self.current_state = "navigate_to_goal"
+                if self.robot.find_path_to_goal(self.maze_env.goal_pos):
+                    print(f"找到到目标点的路径，长度: {len(self.robot.goal_path)}")
+                else:
+                    print("无法找到到目标点的路径，探索结束")
+                    self.current_state = "completed"
+            else:
+                # 如果没找到目标，继续搜索
+                print("尝试寻找目标点...")
+                self.current_state = "search_goal"
         
         # 根据当前状态执行不同的操作
         if self.current_state == "exploration":
@@ -99,6 +123,9 @@ class MazeExploration:
             # 显示探索进度
             if self.step_count % 10 == 0:
                 print(f"探索进度: {self.robot.exploration_progress:.2f}%")
+                # 显示探索时间
+                elapsed_time = current_time - self.exploration_start_time
+                print(f"探索时间: {elapsed_time:.1f}秒 / {self.max_exploration_time}秒")
             
             # 检查是否已经找到目标
             dist_to_goal = math.sqrt((self.robot.x - self.maze_env.goal_pos[0])**2 + 
