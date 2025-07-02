@@ -99,7 +99,6 @@ class MazeExploration:
             if dist_to_goal <= self.goal_detection_distance:
                 print("找到目标点！")
                 self.goal_found = True
-                # 注意：不要立即切换到路径规划，而是继续遍历迷宫
                 
             # 检查是否达到探索阈值
             if self.robot.exploration_progress >= self.exploration_threshold * 100 and not self.exploration_complete:

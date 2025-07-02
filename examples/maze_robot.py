@@ -37,16 +37,12 @@ class Robot:
         self.random_move_count = 0  # 随机移动的次数
         self.stuck_threshold = 5  # 卡住的阈值
         
-        # 探索方向
+        # 探索方向 - 只允许上下左右四个方向
         self.directions = [
             (1, 0),   # 右
             (0, 1),   # 上
             (-1, 0),  # 左
-            (0, -1),  # 下
-            (1, 1),   # 右上
-            (-1, 1),  # 左上
-            (-1, -1), # 左下
-            (1, -1)   # 右下
+            (0, -1)   # 下
         ]
         
         # 标记起始位置为已访问
@@ -177,7 +173,7 @@ class Robot:
     def scan_environment(self):
         """使用激光雷达扫描环境，更新探索地图"""
         # 使用激光传感器扫描环境
-        self.sensor_data = self.sensor.scan((self.x, self.y, self.theta))
+        self.sensor_data = self.sensor.scan((self.x, self.y, self.theta), self.env)
         
         # 更新已探索区域
         current_x, current_y = int(round(self.x)), int(round(self.y))
@@ -248,6 +244,18 @@ class Robot:
                     print(f"初始移动到 ({next_x}, {next_y})")
                     self.update_position((next_x, next_y, math.pi/2))
                     return True
+                else:
+                    # 如果向下也不能走，尝试其他两个方向
+                    for dx, dy in [(0, -1), (-1, 0)]:  # 上、左
+                        next_x, next_y = int(round(self.x)) + dx, int(round(self.y)) + dy
+                        if (0 < next_x < self.env.x_range - 1 and 
+                            0 < next_y < self.env.y_range - 1 and 
+                            (next_x, next_y) not in self.env.obstacles):
+                            
+                            target_theta = math.atan2(dy, dx)
+                            print(f"初始移动到 ({next_x}, {next_y})")
+                            self.update_position((next_x, next_y, target_theta))
+                            return True
                 
         # 如果需要随机移动，执行随机移动
         if self.random_move_count > 0:
@@ -265,6 +273,11 @@ class Robot:
                     (next_x, next_y) not in self.env.obstacles and
                     (next_x, next_y) not in self.failed_targets):
                     possible_moves.append((next_x, next_y))
+            
+            # 优先选择未访问的单元格
+            unvisited_moves = [pos for pos in possible_moves if pos not in self.visited_cells]
+            if unvisited_moves:
+                possible_moves = unvisited_moves
             
             # 如果有可能的移动，随机选择一个
             if possible_moves:
@@ -322,7 +335,7 @@ class Robot:
                                         key=lambda pos: abs(pos[0] - current_pos[0]) + abs(pos[1] - current_pos[1]))
                 
                 # 添加到探索栈
-                for pos in sorted_frontier[:min(10, len(sorted_frontier))]:  # 最多添加10个
+                for pos in sorted_frontier[:min(5, len(sorted_frontier))]:  # 最多添加5个
                     if pos not in self.exploration_stack and pos not in self.failed_targets:
                         self.exploration_stack.append(pos)
                         
@@ -340,7 +353,15 @@ class Robot:
                     
                     if path and len(path) > 1:
                         print(f"找到路径，长度: {len(path)}")
-                        return True
+                        # 移动到路径的下一个点
+                        next_step = path[1]
+                        dx = next_step[0] - current_pos[0]
+                        dy = next_step[1] - current_pos[1]
+                        target_theta = math.atan2(dy, dx)
+                        
+                        if self.update_position((next_step[0], next_step[1], target_theta)):
+                            print(f"移动到路径的下一个点 {next_step}")
+                            return True
                     else:
                         print(f"无法规划到 {target} 的路径，标记为失败目标")
                         if target in self.exploration_stack:
@@ -379,31 +400,26 @@ class Robot:
                 self.failed_targets.add(next_pos)
                 return True
             
-            # 检查路径是否通畅
-            is_clear = self.is_path_clear(current_x, current_y, next_pos[0], next_pos[1])
-            print(f"路径是否通畅: {is_clear}")
+            # 检查是否是相邻的单元格
+            is_adjacent = (abs(next_pos[0] - current_x) + abs(next_pos[1] - current_y)) == 1
             
-            if is_clear:
-                # 计算朝向
+            if is_adjacent and (next_pos[0] - current_x, next_pos[1] - current_y) in self.directions:
+                # 如果是相邻的单元格且方向正确，直接移动
                 dx = next_pos[0] - current_x
                 dy = next_pos[1] - current_y
                 target_theta = math.atan2(dy, dx)
                 
-                # 更新位置
                 if self.update_position((next_pos[0], next_pos[1], target_theta)):
-                    print(f"移动到 {next_pos}")
+                    print(f"直接移动到相邻单元格 {next_pos}")
                     return True
                 else:
                     print(f"移动到 {next_pos} 失败")
-                    # 如果移动失败，标记为失败目标
                     self.failed_targets.add(next_pos)
-                    # 尝试随机移动
-                    self.random_move_count = 5
+                    self.random_move_count = 3
+                    return True
             else:
-                print(f"到 {next_pos} 的路径被阻塞")
-                # 重新规划路径
-                current_pos = (current_x, current_y)
-                a_star = AStar(start=current_pos, goal=next_pos, env=self.env)
+                # 如果不是相邻的单元格，使用A*规划路径
+                a_star = AStar(start=(current_x, current_y), goal=next_pos, env=self.env)
                 cost, path, _ = a_star.plan()
                 
                 if path and len(path) > 1:
@@ -414,22 +430,22 @@ class Robot:
                     target_theta = math.atan2(dy, dx)
                     
                     if self.update_position((next_step[0], next_step[1], target_theta)):
-                        print(f"移动到 {next_step}（重新规划的路径）")
-                        # 将剩余路径点加回栈中
+                        print(f"移动到 {next_step}（规划路径的下一步）")
+                        # 将剩余路径点加回栈中（除了刚刚移动到的点）
                         for point in reversed(path[2:]):
-                            self.exploration_stack.append(point)
+                            if point not in self.visited_cells and point not in self.failed_targets:
+                                self.exploration_stack.append(point)
                         return True
                     else:
                         print(f"移动到 {next_step} 失败")
                         self.failed_targets.add(next_pos)
-                        # 尝试随机移动
-                        self.random_move_count = 5
+                        self.random_move_count = 3
+                        return True
                 else:
                     print(f"无法规划到 {next_pos} 的路径，标记为失败目标")
                     self.failed_targets.add(next_pos)
-                    
-                    # 尝试随机移动来摆脱困境
-                    self.random_move_count = 5
+                    self.random_move_count = 3
+                    return True
         
         # 如果栈为空且没有可探索的边界，则探索完成
         if not self.exploration_stack and not self.frontier - self.visited_cells - self.failed_targets:
@@ -488,15 +504,19 @@ class Robot:
             
             # 检查最终路径是否到达目标
             if valid_path and valid_path[-1] == goal:
-                self.goal_path = valid_path
-                print(f"找到到目标点的有效路径，长度: {len(valid_path)}")
+                # 处理路径，确保只有上下左右四个方向的移动
+                processed_path = self.process_path_to_cardinal_directions(valid_path)
+                self.goal_path = processed_path
+                print(f"找到到目标点的有效路径，长度: {len(processed_path)}")
                 return True
             else:
                 # 尝试使用更细致的路径规划
                 fine_path = self.find_fine_path(start, goal)
                 if fine_path:
-                    self.goal_path = fine_path
-                    print(f"使用细致路径规划找到路径，长度: {len(fine_path)}")
+                    # 处理路径，确保只有上下左右四个方向的移动
+                    processed_path = self.process_path_to_cardinal_directions(fine_path)
+                    self.goal_path = processed_path
+                    print(f"使用细致路径规划找到路径，长度: {len(processed_path)}")
                     return True
                 else:
                     print("无法找到到目标点的有效路径")
@@ -576,10 +596,12 @@ class Robot:
         g_score = {start: 0}
         f_score = {start: euclidean_distance(start, goal)}
         
-        # 定义更多方向（8个方向）
+        # 只使用上下左右四个方向
         fine_directions = [
-            (0, 1), (1, 0), (0, -1), (-1, 0),  # 上、右、下、左
-            (1, 1), (1, -1), (-1, -1), (-1, 1)  # 对角线方向
+            (0, 1),   # 上
+            (1, 0),   # 右
+            (0, -1),  # 下
+            (-1, 0)   # 左
         ]
         
         while open_set:
@@ -597,7 +619,7 @@ class Robot:
             open_set.remove(current)
             closed_set.add(current)
             
-            # 检查8个方向的邻居
+            # 检查四个方向的邻居
             for dx, dy in fine_directions:
                 neighbor = (current[0] + dx, current[1] + dy)
                 
@@ -608,8 +630,8 @@ class Robot:
                     neighbor not in closed_set and
                     self.is_path_clear(current[0], current[1], neighbor[0], neighbor[1])):
                     
-                    # 计算移动代价（对角线移动代价更高）
-                    move_cost = math.sqrt(dx*dx + dy*dy)
+                    # 计算移动代价
+                    move_cost = 1.0
                     
                     # 计算新的g值
                     tentative_g_score = g_score[current] + move_cost
@@ -651,40 +673,121 @@ class Robot:
         
         return None  # 没有找到路径
     
+    def process_path_to_cardinal_directions(self, path):
+        """处理路径，确保只有上下左右四个方向的移动"""
+        if not path or len(path) <= 1:
+            return path
+            
+        processed_path = [path[0]]  # 起点
+        
+        for i in range(1, len(path)):
+            prev = processed_path[-1]
+            current = path[i]
+            
+            # 计算方向
+            dx = current[0] - prev[0]
+            dy = current[1] - prev[1]
+            
+            # 如果是对角线移动，拆分为两个基本移动
+            if dx != 0 and dy != 0:
+                # 先水平移动
+                mid_point = (prev[0] + dx, prev[1])
+                # 检查中间点是否是障碍物
+                if mid_point not in self.env.obstacles:
+                    processed_path.append(mid_point)
+                    processed_path.append(current)
+                else:
+                    # 尝试先垂直移动
+                    mid_point = (prev[0], prev[1] + dy)
+                    if mid_point not in self.env.obstacles:
+                        processed_path.append(mid_point)
+                        processed_path.append(current)
+                    else:
+                        # 两个方向都不行，尝试找到另一条路径
+                        # 这里简单地跳过这个点
+                        continue
+            else:
+                # 如果是基本移动（上下左右），直接添加
+                processed_path.append(current)
+        
+        return processed_path
+    
     def navigate_to_goal(self):
-        """沿着规划的路径导航到目标点"""
+        """沿着规划的路径导航到目标"""
         if not self.goal_path or len(self.goal_path) <= 1:
-            print("没有可用的路径或已到达目标")
+            print("没有规划的路径或已经到达目标")
             return False
         
-        # 获取下一个路径点
-        next_pos = self.goal_path[1]  # 跳过当前位置
-        
-        # 计算朝向
+        # 当前位置
         current_x, current_y = int(round(self.x)), int(round(self.y))
+        current_pos = (current_x, current_y)
+        
+        # 检查当前位置是否在路径上
+        if current_pos not in self.goal_path:
+            print(f"当前位置 {current_pos} 不在规划的路径上，寻找最近的路径点")
+            # 寻找路径上最近的点
+            closest_idx = 0
+            min_dist = float('inf')
+            
+            for i, pos in enumerate(self.goal_path):
+                dist = abs(pos[0] - current_x) + abs(pos[1] - current_y)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_idx = i
+            
+            # 如果找到了最近的点，从那里继续导航
+            if min_dist < 5:  # 设置一个合理的阈值
+                print(f"找到最近的路径点: {self.goal_path[closest_idx]}，距离: {min_dist}")
+                # 从最近的点开始导航
+                self.goal_path = self.goal_path[closest_idx:]
+                if len(self.goal_path) <= 1:
+                    print("已经到达目标点附近")
+                    return False
+            else:
+                # 如果最近的点也很远，重新规划路径
+                print("最近的路径点也很远，需要重新规划路径")
+                return False
+        
+        # 获取路径中的当前位置索引
+        current_index = self.goal_path.index(current_pos)
+        
+        # 检查是否已经到达目标
+        if current_index == len(self.goal_path) - 1:
+            print("已经到达目标点")
+            return False
+        
+        # 获取下一个位置
+        next_pos = self.goal_path[current_index + 1]
+        
+        # 检查下一个位置是否是相邻的单元格
         dx = next_pos[0] - current_x
         dy = next_pos[1] - current_y
+        
+        # 确保只沿着上下左右四个方向移动
+        if (dx, dy) not in self.directions:
+            print(f"下一个位置 {next_pos} 不是上下左右四个方向之一，跳过该点")
+            # 跳过这个点，尝试下一个点
+            if current_index + 2 < len(self.goal_path):
+                next_pos = self.goal_path[current_index + 2]
+                dx = next_pos[0] - current_x
+                dy = next_pos[1] - current_y
+                if (dx, dy) not in self.directions:
+                    print(f"下一个点 {next_pos} 也不是上下左右四个方向之一，重新规划路径")
+                    return False
+            else:
+                print("已经到达路径末尾附近")
+                return False
+        
+        # 计算朝向
         target_theta = math.atan2(dy, dx)
         
-        # 更新位置
+        # 移动到下一个位置
         if self.update_position((next_pos[0], next_pos[1], target_theta)):
-            # 更新路径
-            self.goal_path = self.goal_path[1:]
+            print(f"导航：移动到 {next_pos}")
             return True
         else:
-            print(f"导航到 {next_pos} 失败，重新规划路径")
-            # 重新规划路径
-            start = (current_x, current_y)
-            goal = self.goal_path[-1]
-            a_star = AStar(start=start, goal=goal, env=self.env)
-            cost, path, _ = a_star.plan()
-            
-            if path and len(path) > 1:
-                self.goal_path = path
-                return True
-            else:
-                print("无法重新规划路径")
-                return False
+            print(f"导航：移动到 {next_pos} 失败")
+            return False
     
     def is_path_clear(self, x1, y1, x2, y2):
         """检查从(x1,y1)到(x2,y2)的路径是否通畅"""
@@ -753,54 +856,7 @@ class Robot:
         # 使用激光传感器扫描环境
         self.sensor_data = self.sensor.scan((self.x, self.y, self.theta), self.env)
         
-        # 更新已探索区域
-        current_x, current_y = int(round(self.x)), int(round(self.y))
-        
-        # 将当前位置标记为已访问
-        self.visited_cells.add((current_x, current_y))
-        
-        # 更新周围的探索区域（模拟视野）
-        vision_range = 2  # 视野范围
-        for dx in range(-vision_range, vision_range + 1):
-            for dy in range(-vision_range, vision_range + 1):
-                # 计算距离
-                dist = math.sqrt(dx**2 + dy**2)
-                if dist <= vision_range:
-                    nx, ny = current_x + dx, current_y + dy
-                    # 检查是否在地图范围内
-                    if 0 <= nx < self.env.x_range and 0 <= ny < self.env.y_range:
-                        # 只添加非障碍物区域
-                        if (nx, ny) not in self.env.obstacles:
-                            self.visited_cells.add((nx, ny))
-        
-        # 处理激光点
-        for point in self.sensor_data:
-            # 计算激光点的栅格坐标
-            grid_x, grid_y = int(round(point[0])), int(round(point[1]))
-            
-            # 将激光点标记为已探索
-            if 0 <= grid_x < self.env.x_range and 0 <= grid_y < self.env.y_range:
-                self.visited_cells.add((grid_x, grid_y))
-                
-                # 如果是障碍物，确保它在障碍物集合中
-                if (grid_x, grid_y) in self.env.obstacles:
-                    continue
-                
-                # 标记从机器人到激光点之间的所有点为已探索
-                points = self.get_line(int(round(self.x)), int(round(self.y)), grid_x, grid_y)
-                for px, py in points:
-                    if 0 <= px < self.env.x_range and 0 <= py < self.env.y_range:
-                        self.visited_cells.add((px, py))
-        
-        # 更新未探索的边界单元格
-        self.update_frontier()
-        
-        # 计算探索进度
-        total_cells = (self.env.x_range - 2) * (self.env.y_range - 2) - len(self.env.obstacles)
-        explored_cells = len(self.visited_cells - self.env.obstacles)
-        self.exploration_progress = explored_cells / total_cells * 100 if total_cells > 0 else 100
-        
-        # 更新迷宫格子状态
+        # 更新迷宫单元格状态
         self.update_maze_cells()
     
     def update_frontier(self):
