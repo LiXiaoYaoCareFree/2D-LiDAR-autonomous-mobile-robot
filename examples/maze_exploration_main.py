@@ -15,8 +15,8 @@ from maze_env import MazeEnvironment
 from maze_robot import Robot
 from maze_visualization import MazeVisualization
 
-class MazeExploration:
-    """迷宫测绘与导航系统"""
+class MazeExplorationController:
+    """迷宫探索控制器"""
     def __init__(self):
         # 创建环境
         self.maze_env = MazeEnvironment()
@@ -26,6 +26,7 @@ class MazeExploration:
         
         # 创建可视化
         self.visualizer = MazeVisualization(self.maze_env, self.robot)
+        self.visualizer.controller = self  # 设置控制器引用
         
         # 设置状态
         self.exploration_complete = False
@@ -37,7 +38,7 @@ class MazeExploration:
         self.goal_detection_distance = 3  # 当机器人靠近目标3个单位时，视为找到目标
         
         # 探索完成度阈值
-        self.exploration_threshold = 1.10  # 设置为90%，确保更完整的遍历但不要求100%
+        self.exploration_threshold = 0.99  # 设置为85%，确保合理的遍历但不过高
         
         # 计数器
         self.step_count = 0
@@ -54,11 +55,11 @@ class MazeExploration:
         
         # 导航失败重试次数
         self.navigation_retry_count = 0
-        self.max_navigation_retries = 10  # 最大重试次数
+        self.max_navigation_retries = 5  # 减少最大重试次数，加快阶段转换
         
         # 添加探索时间限制，避免无限探索
         self.exploration_start_time = time.time()
-        self.max_exploration_time = 300  # 最大探索时间，单位秒
+        self.max_exploration_time = 300  # 减少最大探索时间，确保能进入后续阶段
         
     def update(self, visualization):
         """更新一帧"""
@@ -82,42 +83,42 @@ class MazeExploration:
         # 检查探索时间是否超时
         exploration_time = current_time - self.exploration_start_time
         if exploration_time > self.max_exploration_time and self.current_state == "exploration":
-            print(f"探索时间已达到限制 ({self.max_exploration_time}秒)，强制结束探索阶段")
+            print(f"\n===== 阶段转换：探索时间已达到限制 ({self.max_exploration_time}秒)，强制结束探索阶段 =====\n")
             self.exploration_complete = True
             
             # 如果已经找到目标但还没到达，现在导航到目标
             if self.goal_found and not self.reached_goal:
-                print("导航到目标点...")
+                print("\n===== 阶段转换：开始导航到目标点 =====\n")
                 self.current_state = "navigate_to_goal"
                 if self.robot.find_path_to_goal(self.maze_env.goal_pos):
                     print(f"找到到目标点的路径，长度: {len(self.robot.goal_path)}")
                 else:
-                    print("无法找到到目标点的路径，探索结束")
-                    self.current_state = "completed"
+                    print("无法找到到目标点的路径，尝试直接进入路径规划阶段")
+                    self.current_state = "path_planning"
             else:
                 # 如果没找到目标，继续搜索
-                print("尝试寻找目标点...")
+                print("\n===== 阶段转换：开始搜索目标点 =====\n")
                 self.current_state = "search_goal"
         
         # 根据当前状态执行不同的操作
         if self.current_state == "exploration":
             # 探索阶段 - 完整遍历迷宫
             if not self.robot.explore_maze():
-                print("迷宫遍历完成！")
+                print("\n===== 阶段转换：迷宫遍历完成 =====\n")
                 self.exploration_complete = True
                 
                 # 如果已经找到目标但还没到达，现在导航到目标
                 if self.goal_found and not self.reached_goal:
-                    print("导航到目标点...")
+                    print("\n===== 阶段转换：开始导航到目标点 =====\n")
                     self.current_state = "navigate_to_goal"
                     if self.robot.find_path_to_goal(self.maze_env.goal_pos):
                         print(f"找到到目标点的路径，长度: {len(self.robot.goal_path)}")
                     else:
-                        print("无法找到到目标点的路径，探索结束")
-                        self.current_state = "completed"
+                        print("无法找到到目标点的路径，尝试直接进入路径规划阶段")
+                        self.current_state = "path_planning"
                 else:
                     # 如果没找到目标，继续搜索
-                    print("尝试寻找目标点...")
+                    print("\n===== 阶段转换：开始搜索目标点 =====\n")
                     self.current_state = "search_goal"
             
             # 显示探索进度
@@ -130,27 +131,27 @@ class MazeExploration:
             # 检查是否已经找到目标
             dist_to_goal = math.sqrt((self.robot.x - self.maze_env.goal_pos[0])**2 + 
                                      (self.robot.y - self.maze_env.goal_pos[1])**2)
-            if dist_to_goal <= self.goal_detection_distance:
-                print("找到目标点！")
+            if dist_to_goal <= self.goal_detection_distance and not self.goal_found:
+                print("\n===== 发现目标点！=====\n")
                 self.goal_found = True
                 
             # 检查是否达到探索阈值
             if self.robot.exploration_progress >= self.exploration_threshold * 100 and not self.exploration_complete:
-                print(f"达到探索阈值: {self.robot.exploration_progress:.2f}% 的地图已探索")
+                print(f"\n===== 阶段转换：达到探索阈值 {self.robot.exploration_progress:.2f}% >= {self.exploration_threshold * 100}% =====\n")
                 self.exploration_complete = True
                 
                 # 如果已经找到目标但还没到达，现在导航到目标
                 if self.goal_found and not self.reached_goal:
-                    print("导航到目标点...")
+                    print("\n===== 阶段转换：开始导航到目标点 =====\n")
                     self.current_state = "navigate_to_goal"
                     if self.robot.find_path_to_goal(self.maze_env.goal_pos):
                         print(f"找到到目标点的路径，长度: {len(self.robot.goal_path)}")
                     else:
-                        print("无法找到到目标点的路径，探索结束")
-                        self.current_state = "completed"
+                        print("无法找到到目标点的路径，尝试直接进入路径规划阶段")
+                        self.current_state = "path_planning"
                 else:
                     # 如果没找到目标，继续搜索
-                    print("尝试寻找目标点...")
+                    print("\n===== 阶段转换：开始搜索目标点 =====\n")
                     self.current_state = "search_goal"
                 
         elif self.current_state == "search_goal":
@@ -162,13 +163,15 @@ class MazeExploration:
                 # 使用A*算法规划从当前位置到目标位置的路径
                 if self.robot.find_path_to_goal(self.maze_env.goal_pos):
                     self.goal_found = True
-                    print("找到目标点路径！")
+                    print("\n===== 找到目标点路径！=====\n")
                     self.current_state = "navigate_to_goal"
                 else:
-                    print("无法找到目标点，探索结束")
-                    self.current_state = "completed"
+                    print("\n===== 无法找到目标点，直接进入路径规划阶段 =====\n")
+                    # 即使找不到目标，也强制进入路径规划阶段
+                    self.current_state = "path_planning"
             else:
                 # 已经找到目标点，导航过去
+                print("\n===== 阶段转换：开始导航到目标点 =====\n")
                 self.current_state = "navigate_to_goal"
                 
         elif self.current_state == "navigate_to_goal":
@@ -177,7 +180,7 @@ class MazeExploration:
             dist_to_goal = math.sqrt((self.robot.x - self.maze_env.goal_pos[0])**2 + 
                                      (self.robot.y - self.maze_env.goal_pos[1])**2)
             if dist_to_goal <= 1.0:
-                print("到达目标点！")
+                print("\n===== 阶段转换：已到达目标点！=====\n")
                 self.reached_goal = True
                 self.current_state = "path_planning"
                 # 重置导航重试计数
@@ -190,7 +193,7 @@ class MazeExploration:
                 self.navigation_retry_count += 1
                 
                 if self.navigation_retry_count >= self.max_navigation_retries:
-                    print(f"导航失败次数达到最大值({self.max_navigation_retries})，放弃导航")
+                    print(f"\n===== 导航失败次数达到最大值({self.max_navigation_retries})，强制进入下一阶段 =====\n")
                     # 直接进入下一阶段
                     self.reached_goal = True
                     self.current_state = "path_planning"
@@ -200,14 +203,14 @@ class MazeExploration:
                 if self.robot.find_path_to_goal(self.maze_env.goal_pos):
                     print("重新规划路径成功")
                 else:
-                    print("无法找到到目标的路径，探索结束")
-                    self.current_state = "completed"
+                    print("无法找到到目标的路径，强制进入下一阶段")
+                    self.current_state = "path_planning"
                 
         elif self.current_state == "path_planning":
             # 路径规划阶段 - 从终点返回起点
-            print("规划从终点返回起点的路径...")
+            print("\n===== 阶段转换：规划从当前位置返回起点的路径 =====\n")
             
-            # 使用A*算法规划从当前位置(终点)到起点的路径
+            # 使用A*算法规划从当前位置到起点的路径
             if self.robot.find_path_to_goal(self.maze_env.start_pos):
                 self.path_planning_complete = True
                 print(f"找到返回起点的路径，长度: {len(self.robot.goal_path)}")
@@ -222,7 +225,7 @@ class MazeExploration:
             dist_to_start = math.sqrt((self.robot.x - self.maze_env.start_pos[0])**2 + 
                                      (self.robot.y - self.maze_env.start_pos[1])**2)
             if dist_to_start <= 1.0:
-                print("已返回起点！任务完成！")
+                print("\n===== 任务完成：已返回起点！=====\n")
                 self.returned_to_start = True
                 self.current_state = "completed"
                 visualization.exploration_paused = True
@@ -234,9 +237,7 @@ class MazeExploration:
                 self.navigation_retry_count += 1
                 
                 if self.navigation_retry_count >= self.max_navigation_retries:
-                    print(f"导航失败次数达到最大值({self.max_navigation_retries})，放弃导航")
-                    # 直接完成任务
-                    self.returned_to_start = True
+                    print(f"\n===== 导航失败次数达到最大值({self.max_navigation_retries})，放弃导航 =====\n")
                     self.current_state = "completed"
                     visualization.exploration_paused = True
                     return
@@ -244,13 +245,16 @@ class MazeExploration:
                 if self.robot.find_path_to_goal(self.maze_env.start_pos):
                     print("重新规划路径成功")
                 else:
-                    print("无法找到返回起点的路径，探索结束")
+                    print("无法找到到起点的路径，探索结束")
                     self.current_state = "completed"
+                    visualization.exploration_paused = True
                 
         elif self.current_state == "completed":
             # 探索完成，不再更新
-            pass
-            
+            print("\n===== 任务完成 =====\n")
+            visualization.exploration_paused = True
+            return
+        
         # 更新可视化
         visualization.current_state = self.current_state
         visualization.update_visualization()
@@ -386,6 +390,19 @@ class MazeExploration:
             # 暂停一下，以便观察
             time.sleep(0.1)
 
-if __name__ == '__main__':
-    maze_exploration = MazeExploration()
-    maze_exploration.run() 
+def main():
+    """主函数"""
+    # 创建控制器
+    controller = MazeExplorationController()
+    
+    # 创建可视化
+    visualization = controller.visualizer
+    
+    # 启动动画
+    if hasattr(visualization, 'start_animation'):
+        visualization.start_animation()
+    else:
+        visualization.run_animation(controller)
+
+if __name__ == "__main__":
+    main() 

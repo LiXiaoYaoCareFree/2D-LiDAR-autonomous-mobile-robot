@@ -354,3 +354,42 @@ class MazeVisualization:
             print(f"动画运行出错: {e}")
             import traceback
             traceback.print_exc() 
+
+    def update_plot(self):
+        """更新绘图"""
+        # 更新机器人位置
+        self.robot_marker1.set_data([self.robot.x], [self.robot.y])
+        self.robot_marker2.set_data([self.robot.x], [self.robot.y])
+        
+        # 更新机器人方向
+        length = 1.0
+        dx = length * np.cos(self.robot.theta)
+        dy = length * np.sin(self.robot.theta)
+        self.direction_line1.set_data([self.robot.x, self.robot.x + dx], [self.robot.y, self.robot.y + dy])
+        self.direction_line2.set_data([self.robot.x, self.robot.x + dx], [self.robot.y, self.robot.y + dy])
+        
+        # 更新探索区域
+        if hasattr(self.robot, 'visited_cells'):
+            for cell in self.robot.visited_cells:
+                x, y = cell
+                if 0 <= x < self.grid_env.x_range and 0 <= y < self.grid_env.y_range:
+                    self.unexplored[y][x] = 0
+            
+            # 更新阴影图
+            self.shadow.set_data(self.unexplored.T)
+        
+        # 更新目标路径
+        if hasattr(self.robot, 'goal_path') and self.robot.goal_path:
+            # 绘制新路径
+            path_x = [p[0] for p in self.robot.goal_path]
+            path_y = [p[1] for p in self.robot.goal_path]
+            self.path_line1.set_data(path_x, path_y)
+            self.path_line2.set_data(path_x, path_y)
+        
+        # 更新信息文本
+        if hasattr(self.robot, 'exploration_progress'):
+            info_text = f"探索进度: {self.robot.exploration_progress:.2f}%"
+            self.info_text.set_text(info_text)
+        
+        # 刷新画布
+        self.fig.canvas.draw_idle() 
