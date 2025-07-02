@@ -207,6 +207,129 @@ class MazeExploration:
         # 运行动画
         visualization.run_animation(self)
 
+    def run_exploration(self):
+        """运行迷宫探索"""
+        # 初始化可视化
+        self.visualizer.initialize()
+        
+        # 设置状态
+        self.state = "exploring"
+        
+        # 开始探索
+        while True:
+            # 更新可视化
+            self.visualizer.update(self.robot, self.env)
+            
+            # 根据当前状态执行不同的操作
+            if self.state == "exploring":
+                # 探索阶段：机器人探索迷宫，寻找起点和终点
+                if not self.robot.explore_maze():
+                    print("探索完成，进入规划阶段")
+                    self.state = "planning_to_goal"
+                    
+                    # 更新探索完成后的地图
+                    self.visualizer.update(self.robot, self.env)
+                    
+            elif self.state == "planning_to_goal":
+                # 规划阶段：规划从当前位置到终点的路径
+                if self.env.goal is not None:
+                    print(f"规划到终点 {self.env.goal} 的路径")
+                    goal_path = self.robot.find_path_to_goal(self.env.goal)
+                    
+                    if goal_path:
+                        print(f"找到到终点的路径，长度: {len(goal_path)}")
+                        self.robot.goal_path = goal_path[1:]  # 跳过起点
+                        self.state = "moving_to_goal"
+                    else:
+                        print("无法找到到终点的路径，尝试继续探索")
+                        self.state = "exploring"
+                else:
+                    print("终点未知，继续探索")
+                    self.state = "exploring"
+                    
+            elif self.state == "moving_to_goal":
+                # 移动阶段：机器人沿着规划的路径移动到终点
+                if self.robot.goal_path:
+                    # 获取路径上的下一个点
+                    next_point = self.robot.goal_path[0]
+                    self.robot.goal_path.pop(0)
+                    
+                    print(f"移动到终点路径的下一个点 {next_point}")
+                    
+                    # 更新位置
+                    self.robot.update_position((next_point[0], next_point[1], self.robot.theta))
+                else:
+                    # 到达终点
+                    current_pos = (int(round(self.robot.x)), int(round(self.robot.y)))
+                    goal_pos = (int(round(self.env.goal[0])), int(round(self.env.goal[1])))
+                    
+                    if current_pos == goal_pos:
+                        print("已到达终点！")
+                        self.state = "planning_to_start"
+                    else:
+                        print("路径执行完毕但未到达终点，重新规划")
+                        self.state = "planning_to_goal"
+                        
+            elif self.state == "planning_to_start":
+                # 规划阶段：规划从终点回到起点的路径
+                if self.env.start is not None:
+                    print(f"规划回到起点 {self.env.start} 的路径")
+                    
+                    # 使用A*算法直接规划从当前位置到起点的最优路径
+                    current_pos = (int(round(self.robot.x)), int(round(self.robot.y)))
+                    start_pos = (int(round(self.env.start[0])), int(round(self.env.start[1])))
+                    
+                    # 使用已知的地图信息规划最短路径
+                    start_path = self.robot.plan_path(current_pos, start_pos)
+                    
+                    if start_path:
+                        print(f"找到回到起点的路径，长度: {len(start_path)}")
+                        self.robot.goal_path = start_path[1:]  # 跳过起点
+                        self.state = "moving_to_start"
+                    else:
+                        print("无法找到回到起点的路径")
+                        # 尝试随机移动
+                        self.robot.random_move_count = 3
+                        self.state = "exploring"  # 回到探索状态
+                else:
+                    print("起点未知，继续探索")
+                    self.state = "exploring"
+                    
+            elif self.state == "moving_to_start":
+                # 移动阶段：机器人沿着规划的路径移动回起点
+                if self.robot.goal_path:
+                    # 获取路径上的下一个点
+                    next_point = self.robot.goal_path[0]
+                    self.robot.goal_path.pop(0)
+                    
+                    print(f"移动到起点路径的下一个点 {next_point}")
+                    
+                    # 更新位置
+                    self.robot.update_position((next_point[0], next_point[1], self.robot.theta))
+                else:
+                    # 到达起点
+                    current_pos = (int(round(self.robot.x)), int(round(self.robot.y)))
+                    start_pos = (int(round(self.env.start[0])), int(round(self.env.start[1])))
+                    
+                    if current_pos == start_pos:
+                        print("已回到起点！任务完成！")
+                        self.state = "finished"
+                    else:
+                        print("路径执行完毕但未回到起点，重新规划")
+                        self.state = "planning_to_start"
+                        
+            elif self.state == "finished":
+                # 完成状态：任务完成
+                print("迷宫探索任务完成！")
+                break
+                
+            # 更新探索进度
+            exploration_progress = self.robot.exploration_progress
+            print(f"探索进度: {exploration_progress:.2f}%")
+            
+            # 暂停一下，以便观察
+            time.sleep(0.1)
+
 if __name__ == '__main__':
     maze_exploration = MazeExploration()
     maze_exploration.run() 
