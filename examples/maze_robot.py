@@ -395,12 +395,19 @@ class Robot:
         # 使用A*算法规划路径
         path = self.plan_path(current_pos, goal_cell)
         
-        if path:
+        if path and len(path) > 1:
             print(f"找到路径，长度: {len(path)}")
-            return path
+            # 设置目标路径
+            self.goal_path = path
+            return True
+        elif len(path) == 1 and path[0] == current_pos:
+            print(f"当前位置就是目标位置，无需移动")
+            # 创建一个只包含当前位置和目标位置的路径
+            self.goal_path = [current_pos, goal_cell]
+            return True
         else:
             print(f"无法找到到 {goal_cell} 的路径")
-            return None
+            return False
     
     def find_intermediate_path(self, start, goal):
         """寻找两点之间的中间路径，避开障碍物"""
@@ -629,7 +636,7 @@ class Robot:
                 dx = goal[0] - current_x
                 dy = goal[1] - current_y
                 
-                # 确定主要移动方向
+                # 确定主要移动方向（只取一个方向，避免对角线移动）
                 if abs(dx) > abs(dy):
                     # 水平方向移动
                     next_x = current_x + (1 if dx > 0 else -1)
@@ -652,37 +659,45 @@ class Robot:
                     # 移动到下一个位置
                     if self.update_position((next_x, next_y, target_theta)):
                         print(f"直接移动到 {next_pos}")
+                        # 重新规划路径，确保导航可以继续
+                        goal_pos = self.goal_path[-1]
+                        if self.find_path_to_goal(goal_pos):
+                            print("重新规划路径成功")
                         return True
                 
                 # 如果直接移动失败，重新规划路径
                 return False
+        
+        # 尝试沿着路径移动到下一个点
+        try:
+            # 获取路径中的当前位置索引
+            current_index = self.goal_path.index(current_pos)
+            
+            # 检查是否已经到达目标
+            if current_index == len(self.goal_path) - 1:
+                print("已经到达目标点")
+                return False
             
             # 获取下一个位置
-            next_pos = self.goal_path[1]  # 使用第二个点作为下一个位置
-        else:
-            # 获取路径中的当前位置索引
-            try:
-                current_index = self.goal_path.index(current_pos)
-                
-                # 检查是否已经到达目标
-                if current_index == len(self.goal_path) - 1:
-                    print("已经到达目标点")
-                    return False
-                
-                # 获取下一个位置
-                next_pos = self.goal_path[current_index + 1]
-            except ValueError:
-                # 如果当前位置不在路径中（可能由于浮点数精度问题），找最近的点
-                print(f"无法在路径中找到当前位置 {current_pos}，寻找最近的点")
-                min_dist = float('inf')
-                closest_idx = 0
-                
-                for i, pos in enumerate(self.goal_path):
-                    dist = abs(pos[0] - current_x) + abs(pos[1] - current_y)
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest_idx = i
-                
+            next_pos = self.goal_path[current_index + 1]
+        except ValueError:
+            # 如果当前位置不在路径中，找最近的点并从那里继续
+            print(f"无法在路径中找到当前位置 {current_pos}，寻找最近的点")
+            min_dist = float('inf')
+            closest_idx = 0
+            
+            for i, pos in enumerate(self.goal_path):
+                dist = abs(pos[0] - current_x) + abs(pos[1] - current_y)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_idx = i
+            
+            # 如果找到了最近的点，从那里继续导航
+            if min_dist < 3 and closest_idx < len(self.goal_path) - 1:
+                next_pos = self.goal_path[closest_idx + 1]
+                print(f"从最近的路径点 {self.goal_path[closest_idx]} 继续导航到 {next_pos}")
+            else:
+                # 如果最近的点也很远或已经是终点，直接移动向目标
                 if closest_idx < len(self.goal_path) - 1:
                     next_pos = self.goal_path[closest_idx + 1]
                 else:
@@ -693,31 +708,43 @@ class Robot:
         dx = next_pos[0] - current_x
         dy = next_pos[1] - current_y
         
-        # 确保只沿着上下左右四个方向移动
-        if (dx, dy) not in self.directions:
-            print(f"下一个位置 {next_pos} 不是上下左右四个方向之一，跳过该点")
-            # 跳过这个点，尝试下一个点
-            current_index = self.goal_path.index(next_pos)
-            if current_index + 1 < len(self.goal_path):
-                next_pos = self.goal_path[current_index + 1]
-                dx = next_pos[0] - current_x
-                dy = next_pos[1] - current_y
-                if (dx, dy) not in self.directions:
-                    print(f"下一个点 {next_pos} 也不是上下左右四个方向之一，重新规划路径")
-                    return False
+        # 确保只沿着上下左右四个方向移动，不要对角线移动
+        if abs(dx) + abs(dy) > 1:
+            # 如果是对角线移动，分解为两步
+            print(f"检测到对角线移动 ({dx}, {dy})，分解为单步移动")
+            # 优先水平移动
+            if dx != 0:
+                next_pos = (current_x + (1 if dx > 0 else -1), current_y)
             else:
-                print("已经到达路径末尾附近")
-                return False
+                next_pos = (current_x, current_y + (1 if dy > 0 else -1))
+            dx = next_pos[0] - current_x
+            dy = next_pos[1] - current_y
+        
+        # 检查下一步是否有效
+        if (dx, dy) not in self.directions:
+            print(f"下一个位置 {next_pos} 不是有效的移动方向，尝试重新规划")
+            return False
         
         # 计算朝向
         target_theta = math.atan2(dy, dx)
         
         # 移动到下一个位置
         if self.update_position((next_pos[0], next_pos[1], target_theta)):
-            print(f"导航：移动到 {next_pos}")
+            print(f"导航：成功移动到 {next_pos}")
             return True
         else:
-            print(f"导航：移动到 {next_pos} 失败")
+            print(f"导航：移动到 {next_pos} 失败，可能是障碍物")
+            # 尝试从路径中删除这个点
+            try:
+                idx = self.goal_path.index(next_pos)
+                self.goal_path.pop(idx)
+                print(f"从路径中删除障碍点 {next_pos}")
+                # 如果路径太短，重新规划
+                if len(self.goal_path) < 2:
+                    print("路径太短，需要重新规划")
+                    return False
+            except ValueError:
+                pass
             return False
     
     def is_path_clear(self, x1, y1, x2, y2):
@@ -1039,7 +1066,7 @@ class Robot:
 
     def plan_path(self, start, goal):
         """使用A*算法规划从起点到目标的路径"""
-        print(f"规划到未探索区域 {goal} 的路径")
+        print(f"规划从 {start} 到 {goal} 的路径")
         
         # 如果起点和目标相同，直接返回
         if start == goal:
@@ -1069,8 +1096,14 @@ class Robot:
         # 将起点加入开放列表
         heapq.heappush(open_list, (f_score[start], start))
         
+        # 设置最大迭代次数，避免无限循环
+        max_iterations = 10000
+        iteration_count = 0
+        
         # A*搜索
-        while open_list:
+        while open_list and iteration_count < max_iterations:
+            iteration_count += 1
+            
             # 获取f值最小的节点
             _, current = heapq.heappop(open_list)
             
@@ -1081,16 +1114,14 @@ class Robot:
                     current = came_from[current]
                     path.append(current)
                 path.reverse()
+                print(f"找到路径，长度: {len(path)}")
                 return path
                 
             # 将当前节点加入关闭列表
             closed_set.add(current)
             
-            # 根据前进方向对相邻节点进行排序
-            sorted_directions = self.get_sorted_directions()
-            
-            # 遍历相邻节点
-            for dx, dy in sorted_directions:
+            # 遍历相邻节点 - 只考虑上下左右四个方向
+            for dx, dy in self.directions:
                 neighbor = (current[0] + dx, current[1] + dy)
                 
                 # 如果邻居在关闭列表中，跳过
@@ -1105,33 +1136,102 @@ class Robot:
                 if not (0 <= neighbor[0] < self.env.x_range and 0 <= neighbor[1] < self.env.y_range):
                     continue
                 
-                # 计算方向相似度
-                direction_similarity = 0
-                if self.last_move_direction:
-                    # 计算当前移动方向与上一次移动方向的相似度
-                    direction_similarity = dx * self.last_move_direction[0] + dy * self.last_move_direction[1]
+                # 计算从起点到邻居的代价
+                tentative_g_score = g_score[current] + 1
                 
-                # 如果是与上次移动方向相反的方向，增加代价
-                direction_penalty = 0
-                if self.last_move_direction and (dx == -self.last_move_direction[0] and dy == -self.last_move_direction[1]):
-                    direction_penalty = 2.0
+                # 如果是目标点附近，降低代价以提高找到路径的可能性
+                if self.heuristic(neighbor, goal) < 3:
+                    tentative_g_score -= 0.5
+                
+                # 如果找到了更好的路径或是新节点
+                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
+                    # 更新路径和代价
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g_score
+                    f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, goal)
+                    
+                    # 将邻居加入开放列表（如果不在的话）
+                    if not any(neighbor == item[1] for item in open_list):
+                        heapq.heappush(open_list, (f_score[neighbor], neighbor))
+        
+        if iteration_count >= max_iterations:
+            print(f"警告: A*搜索达到最大迭代次数 {max_iterations}")
+        
+        # 如果无法找到完整路径，尝试使用松弛版本的路径规划
+        print(f"无法直接找到从 {start} 到 {goal} 的路径，尝试松弛版本...")
+        
+        # 重置数据结构
+        open_list = []
+        closed_set = set()
+        came_from = {}
+        g_score = {start: 0}
+        f_score = {start: self.heuristic(start, goal)}
+        heapq.heappush(open_list, (f_score[start], start))
+        
+        # 允许经过更多点
+        visited_set = set(self.visited_cells)  # 使用已探索区域的副本
+        
+        # 松弛版本的A*搜索
+        iteration_count = 0
+        while open_list and iteration_count < max_iterations:
+            iteration_count += 1
+            
+            # 获取f值最小的节点
+            _, current = heapq.heappop(open_list)
+            
+            # 如果接近目标，提前结束
+            if self.heuristic(current, goal) < 2:
+                path = [current, goal]  # 直接添加目标
+                while current in came_from:
+                    current = came_from[current]
+                    path.insert(0, current)
+                print(f"找到接近目标的路径，长度: {len(path)}")
+                return path
+                
+            # 将当前节点加入关闭列表
+            closed_set.add(current)
+            
+            # 遍历所有方向（包括对角线）
+            all_directions = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
+            for dx, dy in all_directions:
+                neighbor = (current[0] + dx, current[1] + dy)
+                
+                # 如果邻居在关闭列表中，跳过
+                if neighbor in closed_set:
+                    continue
+                    
+                # 如果邻居是障碍物，跳过
+                if neighbor in self.env.obstacles:
+                    continue
+                    
+                # 如果邻居超出地图范围，跳过
+                if not (0 <= neighbor[0] < self.env.x_range and 0 <= neighbor[1] < self.env.y_range):
+                    continue
+                
+                # 如果是对角线移动，检查两个相邻的格子是否是障碍物
+                if abs(dx) + abs(dy) == 2:
+                    if (current[0] + dx, current[1]) in self.env.obstacles or (current[0], current[1] + dy) in self.env.obstacles:
+                        continue
+                
+                # 计算代价
+                move_cost = 1.0 if (abs(dx) + abs(dy) == 1) else 1.414  # 对角线移动代价更高
                 
                 # 计算从起点到邻居的代价
-                tentative_g_score = g_score[current] + 1 + direction_penalty - direction_similarity * 0.2
+                tentative_g_score = g_score[current] + move_cost
                 
                 # 如果找到了更好的路径，更新代价
                 if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g_score
-                    f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, goal)
+                    f_score[neighbor] = tentative_g_score + self.heuristic(neighbor, goal) * 0.8  # 降低启发式权重
                     
                     # 将邻居加入开放列表
                     if not any(neighbor == item[1] for item in open_list):
                         heapq.heappush(open_list, (f_score[neighbor], neighbor))
         
-        # 如果开放列表为空，说明无法到达目标
-        print(f"无法找到到 {goal} 的路径")
-        return [] 
+        # 如果仍然找不到路径，返回空
+        print(f"无法找到从 {start} 到 {goal} 的路径")
+        return []
 
     def heuristic(self, current, goal):
         """计算两个点之间的曼哈顿距离作为启发式函数"""

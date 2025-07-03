@@ -43,3 +43,7 @@ logs/
 # temporary files
 tmp/
 tmp.*
+
+
+examples/BreezySLAM/
+examples/PyRoboViz/

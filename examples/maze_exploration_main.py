@@ -211,9 +211,43 @@ class MazeExplorationController:
             print("\n===== 阶段转换：规划从当前位置返回起点的路径 =====\n")
             
             # 使用A*算法规划从当前位置到起点的路径
-            if self.robot.find_path_to_goal(self.maze_env.start_pos):
+            start_pos = self.maze_env.start_pos
+            print(f"准备从当前位置 ({self.robot.x}, {self.robot.y}) 返回起点 {start_pos}")
+            
+            if self.robot.find_path_to_goal(start_pos):
                 self.path_planning_complete = True
                 print(f"找到返回起点的路径，长度: {len(self.robot.goal_path)}")
+                print(f"路径详情: {self.robot.goal_path[:min(10, len(self.robot.goal_path))]}...")
+                
+                # 确保路径有效
+                if len(self.robot.goal_path) <= 1:
+                    print("警告: 路径太短，可能无效")
+                    # 尝试强制创建一个简单路径
+                    current_pos = (int(round(self.robot.x)), int(round(self.robot.y)))
+                    if current_pos != start_pos:
+                        print("尝试创建直接路径...")
+                        dx = start_pos[0] - current_pos[0]
+                        dy = start_pos[1] - current_pos[1]
+                        
+                        # 创建简单路径
+                        path = [current_pos]
+                        cx, cy = current_pos
+                        
+                        # 先水平移动
+                        steps = abs(dx)
+                        for i in range(steps):
+                            cx += 1 if dx > 0 else -1
+                            path.append((cx, cy))
+                            
+                        # 再垂直移动
+                        steps = abs(dy)
+                        for i in range(steps):
+                            cy += 1 if dy > 0 else -1
+                            path.append((cx, cy))
+                        
+                        self.robot.goal_path = path
+                        print(f"创建了直接路径，长度: {len(self.robot.goal_path)}")
+                        
                 self.current_state = "navigation"
             else:
                 print("无法找到返回起点的路径，探索结束")
@@ -230,8 +264,20 @@ class MazeExplorationController:
                 self.current_state = "completed"
                 visualization.exploration_paused = True
                 return
+            
+            # 检查是否有有效路径
+            if not self.robot.goal_path or len(self.robot.goal_path) < 2:
+                print("警告: 返回起点的路径无效或为空，尝试重新规划")
+                if self.robot.find_path_to_goal(self.maze_env.start_pos):
+                    print(f"重新规划成功，路径长度: {len(self.robot.goal_path)}")
+                else:
+                    print("重新规划失败，放弃导航")
+                    self.current_state = "completed"
+                    visualization.exploration_paused = True
+                    return
                 
             # 沿着规划的路径导航
+            print(f"当前位置: ({self.robot.x:.1f}, {self.robot.y:.1f}), 下一个路径点: {self.robot.goal_path[1] if len(self.robot.goal_path) > 1 else '无'}")
             if not self.robot.navigate_to_goal():
                 print("导航失败，重新规划路径...")
                 self.navigation_retry_count += 1
