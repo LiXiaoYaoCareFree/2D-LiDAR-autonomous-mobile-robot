@@ -202,6 +202,27 @@ class MazeVisualization:
                 self.ax1.plot([self.robot.x, point[0]], [self.robot.y, point[1]], 'y-', alpha=0.3)  # 黄色激光线
                 self.ax1.plot(point[0], point[1], 'rx', markersize=3)  # 红色激光点
         
+        # 绘制雷达射线
+        if hasattr(self, 'controller') and hasattr(self.controller, 'slam_visualizer') and hasattr(self.controller.slam_visualizer, 'radar_rays'):
+            for ray in self.controller.slam_visualizer.radar_rays:
+                start_pos, end_pos = ray
+                # 提取起点坐标（忽略角度）
+                if len(start_pos) == 3:
+                    start_x, start_y, _ = start_pos
+                else:
+                    start_x, start_y = start_pos
+                
+                # 提取终点坐标
+                if isinstance(end_pos, tuple):
+                    end_x, end_y = end_pos[:2]  # 只取前两个坐标
+                else:
+                    end_x, end_y = end_pos, end_pos
+                
+                # 在SLAM地图上绘制雷达射线
+                self.ax3.plot([start_x, end_x], [start_y, end_y], 'g-', alpha=0.5, linewidth=0.8)
+                # 在雷达射线终点绘制小点
+                self.ax3.plot(end_x, end_y, 'g.', markersize=3)
+        
         # 绘制已探索区域
         if hasattr(self.robot, 'visited_cells'):
             for cell in self.robot.visited_cells:

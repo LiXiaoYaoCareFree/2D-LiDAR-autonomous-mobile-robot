@@ -38,15 +38,28 @@ class SLAMVisualizer:
         # 激光扫描数据
         self.scan_points = []
         self.obstacle_points = []
+        self.radar_rays = []  # 存储雷达射线
         
         # 道路宽度（与机器人大小相关）
         self.road_width = 0.5  # 单位：网格单元
+        
+        # 雷达扫描参数
+        self.radar_range = 3.0  # 雷达探测范围（单位：格子）
+        self.radar_angle_min = -math.pi/2  # 雷达最小角度（左侧90度）
+        self.radar_angle_max = math.pi/2   # 雷达最大角度（右侧90度）
+        self.radar_angle_step = math.pi/36  # 雷达角度步长（5度）
         
     def world_to_grid(self, world_pos):
         """将世界坐标转换为网格坐标"""
         x = int((world_pos[0] + 2) / self.resolution)
         y = int((world_pos[1] + 2) / self.resolution)
         return max(0, min(x, self.grid_size - 1)), max(0, min(y, self.grid_size - 1))
+    
+    def grid_to_world(self, grid_pos):
+        """将网格坐标转换为世界坐标"""
+        x = grid_pos[0] * self.resolution - 2
+        y = grid_pos[1] * self.resolution - 2
+        return x, y
         
     def update_map(self, robot_pos, scan_data):
         """更新SLAM地图"""
@@ -56,6 +69,7 @@ class SLAMVisualizer:
         # 更新激光扫描数据
         self.scan_points = []
         self.obstacle_points = []
+        self.radar_rays = []
         
         # 获取机器人位置的网格坐标
         robot_grid_x, robot_grid_y = self.world_to_grid(robot_pos)
@@ -69,6 +83,9 @@ class SLAMVisualizer:
                     # 只有未知区域才标记为空闲，避免覆盖已标记的障碍物
                     if self.slam_map[nx, ny] == 0:
                         self.slam_map[nx, ny] = 1  # 标记为空闲
+        
+        # 执行雷达扫描
+        self.perform_radar_scan(robot_pos)
         
         # 处理激光扫描数据
         if scan_data:
@@ -91,6 +108,96 @@ class SLAMVisualizer:
                 
                 # 记录障碍物点
                 self.obstacle_points.append(point)
+    
+    def perform_radar_scan(self, robot_pos):
+        """执行雷达扫描，探测前方区域"""
+        # 修复：确保robot_pos有三个值
+        if isinstance(robot_pos, tuple) and len(robot_pos) == 2:
+            robot_x, robot_y = robot_pos
+            # 从机器人对象获取朝向
+            robot_theta = self.robot.theta if hasattr(self, 'robot') else 0
+        elif isinstance(robot_pos, tuple) and len(robot_pos) == 3:
+            robot_x, robot_y, robot_theta = robot_pos
+        else:
+            # 处理其他情况
+            print(f"警告: 无效的robot_pos格式: {robot_pos}")
+            return
+        
+        # 雷达扫描，从左到右扫描前方区域
+        for angle in np.arange(self.radar_angle_min, self.radar_angle_max + self.radar_angle_step, self.radar_angle_step):
+            # 计算雷达射线的绝对角度（考虑机器人朝向）
+            abs_angle = robot_theta + angle
+            
+            # 计算雷达射线的方向向量
+            dx = math.cos(abs_angle)
+            dy = math.sin(abs_angle)
+            
+            # 执行射线投射，寻找障碍物
+            hit_point, hit_obstacle = self.cast_ray((robot_x, robot_y, robot_theta), dx, dy, self.radar_range)
+            
+            # 记录雷达射线
+            self.radar_rays.append(((robot_x, robot_y), hit_point))
+            
+            # 如果射线击中障碍物，将其标记为障碍物
+            if hit_obstacle:
+                grid_x, grid_y = self.world_to_grid(hit_point)
+                
+                # 将障碍物点周围小范围标记为障碍物，使墙壁更明显
+                obstacle_width = 1  # 障碍物宽度
+                for dx_obs in range(-obstacle_width, obstacle_width + 1):
+                    for dy_obs in range(-obstacle_width, obstacle_width + 1):
+                        nx, ny = grid_x + dx_obs, grid_y + dy_obs
+                        if 0 <= nx < self.grid_size and 0 <= ny < self.grid_size:
+                            self.slam_map[nx, ny] = 2  # 障碍物
+                
+                # 将机器人到障碍物点的路径标记为空闲
+                robot_grid_x, robot_grid_y = self.world_to_grid((robot_x, robot_y))
+                self.mark_line_as_free(robot_grid_x, robot_grid_y, grid_x, grid_y)
+                
+                # 记录障碍物点
+                self.obstacle_points.append(hit_point)
+    
+    def cast_ray(self, start_pos, dx, dy, max_range):
+        """投射射线，检测障碍物
+        
+        Args:
+            start_pos: 起始位置 (x, y, theta)
+            dx, dy: 射线方向向量
+            max_range: 最大检测范围
+            
+        Returns:
+            hit_point: 射线终点或碰撞点
+            hit_obstacle: 是否击中障碍物
+        """
+        start_x, start_y, _ = start_pos
+        
+        # 射线步长
+        step_size = 0.1
+        
+        # 当前位置
+        current_x, current_y = start_x, start_y
+        
+        # 检测距离
+        distance = 0.0
+        
+        while distance < max_range:
+            # 更新位置
+            current_x += dx * step_size
+            current_y += dy * step_size
+            distance += step_size
+            
+            # 检查是否超出地图边界
+            if (current_x < 0 or current_x >= self.maze_env.width or
+                current_y < 0 or current_y >= self.maze_env.height):
+                return (current_x, current_y), True
+            
+            # 检查是否击中障碍物
+            grid_x, grid_y = int(round(current_x)), int(round(current_y))
+            if self.maze_env.grid_env.is_obstacle(grid_x, grid_y):
+                return (current_x, current_y), True
+        
+        # 没有击中障碍物，返回最大范围的点
+        return (start_x + dx * max_range, start_y + dy * max_range), False
     
     def mark_line_as_free(self, x0, y0, x1, y1):
         """使用Bresenham算法将线段标记为空闲，但不包括终点（障碍物）"""
