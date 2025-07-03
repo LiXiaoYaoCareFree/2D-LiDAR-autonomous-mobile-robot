@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>迷宫SLAM实时可视化系统</title>
+    
+    <!-- 引入外部库 -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- 头部标题 -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">
+                    <i class="fas fa-robot"></i>
+                    迷宫SLAM实时可视化系统
+                    <span class="subtitle">Maze SLAM Real-time Visualization System</span>
+                </h1>
+                <div class="connection-status" id="connectionStatus">
+                    <i class="fas fa-circle"></i>
+                    <span>连接中...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 左侧控制面板 -->
+            <aside class="control-panel">
+                <div class="panel-section">
+                    <h3><i class="fas fa-cog"></i> 仿真参数</h3>
+                    
+                    <!-- 地图配置 -->
+                    <div class="input-group">
+                        <label for="mazeSize">地图尺寸:</label>
+                        <input type="number" id="mazeSize" min="4" max="20" value="8" step="1">
+                        <span class="unit">x 8</span>
+                    </div>
+                    
+                    <!-- 起点配置 -->
+                    <div class="input-group">
+                        <label>起点坐标:</label>
+                        <div class="coordinate-input">
+                            <input type="number" id="startX" value="1.0" step="0.1" placeholder="X">
+                            <input type="number" id="startY" value="1.0" step="0.1" placeholder="Y">
+                        </div>
+                    </div>
+                    
+                    <!-- 墙壁配置 -->
+                    <div class="input-group">
+                        <label for="wallsConfig">墙壁配置:</label>
+                        <textarea id="wallsConfig" rows="6" placeholder="留空使用默认地图，或输入自定义墙壁...&#10;格式: [&#10;  {&quot;start&quot;: [x1, y1], &quot;end&quot;: [x2, y2]},&#10;  {&quot;start&quot;: [x3, y3], &quot;end&quot;: [x4, y4]}&#10;]"></textarea>
+                    </div>
+                    
+                    <!-- 控制按钮 -->
+                    <div class="control-buttons">
+                        <button id="startBtn" class="btn btn-primary">
+                            <i class="fas fa-play"></i>
+                            开始仿真
+                        </button>
+                        <button id="stopBtn" class="btn btn-secondary" disabled>
+                            <i class="fas fa-stop"></i>
+                            停止仿真
+                        </button>
+                        <button id="resetBtn" class="btn btn-warning">
+                            <i class="fas fa-refresh"></i>
+                            重置参数
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 状态信息面板 -->
+                <div class="panel-section">
+                    <h3><i class="fas fa-chart-line"></i> 实时状态</h3>
+                    <div class="status-info" id="statusInfo">
+                        <div class="status-item">
+                            <span class="label">机器人位置:</span>
+                            <span class="value" id="robotPosition">--</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">执行步数:</span>
+                            <span class="value" id="robotSteps">--</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">当前状态:</span>
+                            <span class="value" id="robotStatus">--</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">前沿点数:</span>
+                            <span class="value" id="frontiersCount">--</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">覆盖率:</span>
+                            <span class="value" id="coverage">--%</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">发现出口:</span>
+                            <span class="value" id="discoveredExits">--</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">到达出口:</span>
+                            <span class="value" id="reachedExits">--</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">最优路径:</span>
+                            <span class="value" id="pathLength">--</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 系统日志 -->
+                <div class="panel-section">
+                    <h3><i class="fas fa-terminal"></i> 系统日志</h3>
+                    <div class="log-container" id="logContainer">
+                        <div class="log-item">系统已就绪，等待开始仿真...</div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- 右侧可视化区域 -->
+            <section class="visualization-area">
+                <div class="charts-grid">
+                    <!-- 真实迷宫图 -->
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h4><i class="fas fa-map"></i> 真实迷宫</h4>
+                            <div class="chart-info">显示真实迷宫结构、机器人路径和目标</div>
+                        </div>
+                        <div class="chart-content" id="trueMazeChart"></div>
+                    </div>
+                    
+                    <!-- SLAM地图 -->
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h4><i class="fas fa-brain"></i> SLAM地图</h4>
+                            <div class="chart-info">机器人构建的环境地图</div>
+                        </div>
+                        <div class="chart-content" id="slamMapChart"></div>
+                    </div>
+                    
+                    <!-- 前沿探索图 -->
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h4><i class="fas fa-crosshairs"></i> 前沿探索</h4>
+                            <div class="chart-info">未探索区域的边界点</div>
+                        </div>
+                        <div class="chart-content" id="frontierChart"></div>
+                    </div>
+                    
+                    <!-- 雷达模拟图 -->
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h4><i class="fas fa-satellite-dish"></i> 雷达模拟</h4>
+                            <div class="chart-info">激光雷达扫描数据</div>
+                        </div>
+                        <div class="chart-content" id="radarChart"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <!-- 进度条 -->
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+            <span class="progress-text" id="progressText">准备开始...</span>
+        </div>
+    </div>
+
+    <!-- 模态对话框 -->
+    <div class="modal" id="infoModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>系统信息</h3>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- 动态内容 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载覆盖层 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h3>初始化仿真系统...</h3>
+            <p>正在创建迷宫环境和机器人</p>
+        </div>
+    </div>
+
+    <!-- 主脚本 -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html> 
