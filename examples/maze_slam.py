@@ -451,24 +451,5 @@ def main():
     # 运行SLAM可视化
     slam.run()
     
-if __name__ == "__main__":
-    import argparse
-    import os
-    sys.path.append(os.path.join(os.path.dirname(__file__), 'best'))
-    sys.path.append(os.path.join(os.path.dirname(__file__), '../best'))
-    try:
-        from maze_slam_visual_new2 import GlobalMazeSLAMSystem
-    except ImportError as e:
-        print("无法导入GlobalMazeSLAMSystem，请确认examples/best/maze_slam_visual_new2.py存在且无语法错误。")
-        raise e
-
-    parser = argparse.ArgumentParser(description="迷宫SLAM探索与可视化 (集成新版SLAM系统)")
-    parser.add_argument('--map', type=str, default="json_data/1.json", help="json地图文件路径，默认json_data/1.json")
-    args = parser.parse_args()
-    map_file = os.path.join(os.path.dirname(__file__), args.map)
-    if not os.path.exists(map_file):
-        print(f"地图文件不存在: {map_file}")
-        exit(1)
-    print(f"使用地图文件: {map_file}")
-    slam_system = GlobalMazeSLAMSystem(map_file)
-    slam_system.run_exploration()  # 会自动弹出matplotlib窗口实时显示 
+if __name__ == '__main__':
+    main() 

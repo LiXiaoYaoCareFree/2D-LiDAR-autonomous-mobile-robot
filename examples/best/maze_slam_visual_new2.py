@@ -1,5 +1,3 @@
-
-
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1702,12 +1700,11 @@ class SingleRobotVisualizer:
         self.global_mapper = global_mapper
         self.robot = robot
         
-        # 创建2x2面板显示
-        self.fig, self.axes = plt.subplots(2, 2, figsize=(16, 12))
-        self.ax_true = self.axes[0, 0]      # 真实迷宫 + 机器人
-        self.ax_slam = self.axes[0, 1]      # SLAM地图
-        self.ax_frontiers = self.axes[1, 0] # 前沿探索图
-        self.ax_radar = self.axes[1, 1]     # 雷达模拟图
+        # 创建1x3面板显示
+        self.fig, self.axes = plt.subplots(1, 3, figsize=(18, 6))
+        self.ax_true = self.axes[0]      # 真实迷宫 + 机器人
+        self.ax_slam = self.axes[1]      # SLAM地图
+        self.ax_radar = self.axes[2]     # 雷达模拟图
         
         # 存储最新的扫描数据
         self.latest_scan_points = []
@@ -1735,7 +1732,6 @@ class SingleRobotVisualizer:
         """更新显示"""
         self.draw_true_maze()
         self.draw_slam_map()
-        self.draw_frontiers()
         self.draw_radar_simulation()
         
         # 显示状态信息
@@ -1779,7 +1775,7 @@ class SingleRobotVisualizer:
         self.fig.suptitle(status_text, fontsize=11, y=0.98)
         
         plt.tight_layout()
-        plt.subplots_adjust(top=0.92, bottom=0.08, left=0.08, right=0.95, hspace=0.25, wspace=0.25)
+        plt.subplots_adjust(top=0.90, bottom=0.10, left=0.05, right=0.98, wspace=0.25)
         plt.pause(0.001)  # 极快的更新频率
     
     def draw_true_maze(self):
@@ -1930,63 +1926,6 @@ class SingleRobotVisualizer:
         ax.set_ylim(-2, self.maze_env.size + 2)
         ax.set_aspect('equal')
         ax.set_title("SLAM Map", fontsize=12)
-    
-    def draw_frontiers(self):
-        """绘制前沿探索图"""
-        ax = self.ax_frontiers
-        ax.clear()
-        
-        # 所有扩展区域都不绘制背景，让其保持与未扫描区域相同的颜色
-        
-        # 绘制全局地图背景
-        cmap = colors.ListedColormap(['lightgray', 'white', 'black'])
-        ax.imshow(self.global_mapper.global_map, cmap=cmap, origin='lower', 
-                 extent=[-2, self.global_mapper.display_size-2, -2, self.global_mapper.display_size-2], alpha=0.7)
-        
-        # 绘制机器人到达出口时的位置标记（红色小圈）
-        for i, reached_pos in enumerate(self.maze_env.reached_exit_positions):
-            reached_x, reached_y = reached_pos
-            ax.plot(reached_x, reached_y, 'o', markersize=20, markerfacecolor='none',
-                    markeredgecolor='red', markeredgewidth=3, alpha=0.9,
-                    label='🔴 EXIT REACHED' if i == 0 else '')
-        
-        # 绘制前沿点
-        if self.global_mapper.frontiers:
-            frontier_x = [f[0] for f in self.global_mapper.frontiers]
-            frontier_y = [f[1] for f in self.global_mapper.frontiers]
-            ax.plot(frontier_x, frontier_y, 'r*', markersize=6, alpha=0.8, 
-                   label=f'Frontiers ({len(self.global_mapper.frontiers)})')
-        
-        # 绘制最短路径（如果存在）
-        if self.shortest_path and len(self.shortest_path) > 1:
-            path_x = [p[0] for p in self.shortest_path]
-            path_y = [p[1] for p in self.shortest_path]
-            ax.plot(path_x, path_y, 'g-', linewidth=3, alpha=0.8, label='Optimal Path (8-dir)')
-            
-            # 标记对角线段
-            for i in range(len(self.shortest_path) - 1):
-                p1 = self.shortest_path[i]
-                p2 = self.shortest_path[i + 1]
-                dx = abs(p2[0] - p1[0])
-                dy = abs(p2[1] - p1[1])
-                if dx > 0.01 and dy > 0.01:  # 对角线移动
-                    ax.plot([p1[0], p2[0]], [p1[1], p2[1]], 'g--', 
-                           linewidth=2, alpha=0.5, zorder=3)
-            
-            # 标记起点和终点
-            ax.plot(path_x[0], path_y[0], 'go', markersize=10, markeredgewidth=2, 
-                   markeredgecolor='darkgreen')
-            ax.plot(path_x[-1], path_y[-1], 'gs', markersize=10, markeredgewidth=2, 
-                   markeredgecolor='darkgreen')
-        
-        # 绘制机器人位置
-        ax.plot(self.robot.position[0], self.robot.position[1], 'bo', markersize=8)
-        
-        ax.set_xlim(-2, self.maze_env.size + 2)
-        ax.set_ylim(-2, self.maze_env.size + 2)
-        ax.set_aspect('equal')
-        ax.legend()
-        ax.set_title("Frontier Exploration", fontsize=12)
     
     def draw_radar_simulation(self):
         """绘制雷达模拟图"""

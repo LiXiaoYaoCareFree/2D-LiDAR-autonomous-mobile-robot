@@ -10,11 +10,231 @@ import math
 import sys
 import os
 import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+import matplotlib.animation as animation
 
 # 导入自定义模块
 from maze_env import MazeEnvironment
 from maze_robot import Robot
 from maze_visualization import MazeVisualization
+
+class MazeSLAMVisualizer:
+    """迷宫SLAM可视化类，独立于主程序逻辑"""
+    
+    def __init__(self, maze_env, robot):
+        """初始化SLAM可视化器
+        
+        参数:
+            maze_env: 迷宫环境
+            robot: 机器人对象
+        """
+        self.maze_env = maze_env
+        self.robot = robot
+        
+        # SLAM地图相关
+        self.map_resolution = 0.1  # 地图分辨率，每个格子代表0.1个单位
+        self.map_size = int(max(maze_env.width, maze_env.height) / self.map_resolution) + 20  # 地图大小，加上边界
+        self.slam_map = np.zeros((self.map_size, self.map_size))  # 0=未知，1=空闲，2=障碍物
+        
+        # 机器人路径
+        self.robot_path = []
+        
+        # 激光数据
+        self.scan_points = []
+        self.obstacle_points = []
+        
+        # 创建图形和子图
+        self.fig, self.ax = plt.subplots(figsize=(10, 10))
+        self.fig.suptitle('迷宫SLAM可视化')
+        
+        # 设置坐标轴
+        self.ax.set_xlim(0, self.maze_env.width)
+        self.ax.set_ylim(0, self.maze_env.height)
+        self.ax.set_title("迷宫SLAM地图")
+        self.ax.set_aspect('equal')
+        
+        # 初始化地图图像
+        self.map_image = self.ax.imshow(
+            self.slam_map, 
+            cmap=ListedColormap(['lightgray', 'white', 'black']), 
+            origin='lower',
+            extent=[0, self.map_size * self.map_resolution, 0, self.map_size * self.map_resolution],
+            alpha=0.7
+        )
+        
+        # 初始化机器人位置标记
+        self.robot_marker, = self.ax.plot([], [], 'bo', markersize=8)
+        
+        # 初始化机器人路径
+        self.path_line, = self.ax.plot([], [], 'b-', linewidth=1, alpha=0.6)
+        
+        # 初始化激光线
+        self.laser_lines = []
+        
+        # 初始化文本信息
+        self.info_text = self.ax.text(
+            0.02, 0.98, '', transform=self.ax.transAxes,
+            verticalalignment='top', fontsize=10,
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.7)
+        )
+        
+        # 使用定时器更新，而不是FuncAnimation
+        self.timer = self.fig.canvas.new_timer(interval=100)
+        self.timer.add_callback(self.update_callback)
+        self.timer.start()
+        
+        # 显示图形
+        plt.ion()  # 开启交互模式
+        plt.show(block=False)
+    
+    def update_callback(self):
+        """定时器回调函数，更新SLAM地图"""
+        try:
+            # 检查图形是否仍然存在
+            if plt.fignum_exists(self.fig.number):
+                self.update()
+                self.fig.canvas.draw_idle()
+                self.fig.canvas.flush_events()
+        except Exception as e:
+            print(f"SLAM更新错误: {e}")
+            # 出错时停止定时器
+            if hasattr(self, 'timer'):
+                self.timer.stop()
+        
+    def update(self):
+        """更新SLAM地图可视化
+        """
+        # 更新机器人路径
+        self.robot_path.append((self.robot.x, self.robot.y))
+        if len(self.robot_path) > 1000:  # 限制路径长度
+            self.robot_path = self.robot_path[-1000:]
+        
+        # 更新SLAM地图
+        self.update_slam_map()
+        
+        # 更新地图图像
+        self.map_image.set_data(self.slam_map)
+        
+        # 更新机器人位置
+        self.robot_marker.set_data([self.robot.x], [self.robot.y])
+        
+        # 更新机器人路径
+        if self.robot_path:
+            path_x = [p[0] for p in self.robot_path]
+            path_y = [p[1] for p in self.robot_path]
+            self.path_line.set_data(path_x, path_y)
+        
+        # 清除旧的激光线
+        for line in self.laser_lines:
+            line.remove()
+        self.laser_lines = []
+        
+        # 绘制新的激光线
+        if hasattr(self.robot, 'sensor_data') and self.robot.sensor_data:
+            for point in self.robot.sensor_data:
+                line, = self.ax.plot(
+                    [self.robot.x, point[0]], [self.robot.y, point[1]],
+                    'y-', alpha=0.3
+                )
+                self.laser_lines.append(line)
+        
+        # 更新信息文本
+        status_text = f"位置: ({self.robot.x:.1f}, {self.robot.y:.1f})\n"
+        if hasattr(self.robot, 'exploration_progress'):
+            status_text += f"探索进度: {self.robot.exploration_progress:.1f}%\n"
+        if hasattr(self.maze_env, 'goal_pos'):
+            dist = math.sqrt((self.robot.x - self.maze_env.goal_pos[0])**2 + 
+                           (self.robot.y - self.maze_env.goal_pos[1])**2)
+            status_text += f"距离目标: {dist:.1f}"
+        self.info_text.set_text(status_text)
+        
+    def update_slam_map(self):
+        """更新SLAM地图"""
+        # 获取机器人当前位置
+        robot_pos = (self.robot.x, self.robot.y)
+        
+        # 确保机器人已扫描环境
+        self.robot.scan_environment()
+        scan_data = self.robot.sensor_data
+        
+        # 将机器人位置转换为地图坐标
+        robot_map_x, robot_map_y = self.world_to_map(robot_pos[0], robot_pos[1])
+        
+        # 将机器人位置周围标记为空闲区域
+        view_range = int(1.5 / self.map_resolution)  # 视野范围
+        for dx in range(-view_range, view_range + 1):
+            for dy in range(-view_range, view_range + 1):
+                mx, my = robot_map_x + dx, robot_map_y + dy
+                if 0 <= mx < self.map_size and 0 <= my < self.map_size:
+                    # 计算到机器人的距离
+                    dist = math.sqrt(dx**2 + dy**2) * self.map_resolution
+                    if dist <= 1.0:  # 只标记1.0单位范围内的区域
+                        self.slam_map[my, mx] = 1  # 标记为空闲区域
+        
+        # 处理激光扫描数据
+        for point in scan_data:
+            # 将扫描点转换为地图坐标
+            scan_map_x, scan_map_y = self.world_to_map(point[0], point[1])
+            
+            # 检查是否在地图范围内
+            if 0 <= scan_map_x < self.map_size and 0 <= scan_map_y < self.map_size:
+                # 标记扫描点为障碍物
+                self.slam_map[scan_map_y, scan_map_x] = 2
+                
+                # 使用Bresenham算法绘制从机器人到扫描点的线
+                line_points = self.bresenham_line(robot_map_x, robot_map_y, scan_map_x, scan_map_y)
+                
+                # 标记线上的点为空闲区域，除了最后一个点（障碍物）
+                for i, (mx, my) in enumerate(line_points[:-1]):
+                    if 0 <= mx < self.map_size and 0 <= my < self.map_size:
+                        self.slam_map[my, mx] = 1  # 标记为空闲区域
+    
+    def world_to_map(self, world_x, world_y):
+        """将世界坐标转换为地图坐标"""
+        # 添加偏移量，确保负坐标也能映射到地图上
+        offset = 10
+        map_x = int((world_x + offset) / self.map_resolution)
+        map_y = int((world_y + offset) / self.map_resolution)
+        return map_x, map_y
+    
+    def map_to_world(self, map_x, map_y):
+        """将地图坐标转换为世界坐标"""
+        offset = 10
+        world_x = map_x * self.map_resolution - offset
+        world_y = map_y * self.map_resolution - offset
+        return world_x, world_y
+    
+    def bresenham_line(self, x0, y0, x1, y1):
+        """Bresenham算法，获取从(x0,y0)到(x1,y1)的线上的所有点"""
+        points = []
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+        
+        while True:
+            points.append((x0, y0))
+            if x0 == x1 and y0 == y1:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
+                
+        return points
+    
+    def close(self):
+        """关闭可视化窗口"""
+        # 停止定时器
+        if hasattr(self, 'timer'):
+            self.timer.stop()
+        plt.close(self.fig)
 
 class MazeExplorationController:
     """迷宫探索控制器"""
@@ -452,6 +672,7 @@ def main():
     parser.add_argument('--maze-id', type=int, choices=[1, 2, 3], help='使用预定义的迷宫ID (1, 2, 3)')
     parser.add_argument('--width', type=int, default=15, help='迷宫宽度，默认15')
     parser.add_argument('--height', type=int, default=15, help='迷宫高度，默认15')
+    parser.add_argument('--slam', action='store_true', help='启用SLAM可视化')
     args = parser.parse_args()
     
     # 确定迷宫文件路径
@@ -482,7 +703,24 @@ def main():
     
     # 创建并运行控制器
     controller = MazeExplorationController(maze_env)
-    controller.run()
+    
+    # 如果启用SLAM可视化，创建SLAM可视化器
+    slam_visualizer = None
+    if args.slam:
+        slam_visualizer = MazeSLAMVisualizer(maze_env, controller.robot)
+    
+    try:
+        # 运行控制器
+        controller.run()
+    finally:
+        # 如果SLAM可视化器存在，保持窗口打开直到用户关闭
+        if slam_visualizer:
+            # 停止定时器更新，但保持窗口打开
+            slam_visualizer.timer.stop()
+            plt.ioff()
+            plt.show(block=True)
+            # 最后关闭可视化器
+            slam_visualizer.close()
 
 if __name__ == "__main__":
     main() 

@@ -1,3 +1,3 @@
 ```python
-python examples/maze_slam.py --map json_data/3.json
+python examples/maze_slam_gui.py --map_file examples/json_data/2.json
 ```
