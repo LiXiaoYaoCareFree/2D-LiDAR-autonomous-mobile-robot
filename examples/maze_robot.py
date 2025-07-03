@@ -152,7 +152,48 @@ class Robot:
             print(f"警告：位置 ({new_x}, {new_y}) 是障碍物")
             return False
         
+        # 确保移动是连续的（不跳格子）
         old_x, old_y = self.x, self.y
+        dx, dy = new_x - old_x, new_y - old_y
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        # 如果距离大于1.5，说明可能会跳格子，需要进行插值移动
+        if distance > 1.5:
+            print(f"检测到跳格子移动，距离: {distance:.2f}，进行插值移动")
+            # 计算需要插入的中间点数量
+            steps = math.ceil(distance)
+            # 进行插值移动
+            for i in range(1, steps):
+                # 计算中间点位置
+                intermediate_x = old_x + (dx * i) / steps
+                intermediate_y = old_y + (dy * i) / steps
+                intermediate_theta = self.theta + ((new_theta - self.theta) * i) / steps
+                
+                # 检查中间点是否有效
+                if not (0 <= intermediate_x < self.env.x_range and 0 <= intermediate_y < self.env.y_range):
+                    continue
+                    
+                # 检查中间点是否是障碍物
+                if (int(round(intermediate_x)), int(round(intermediate_y))) in self.env.obstacles:
+                    continue
+                    
+                # 更新到中间点位置
+                self.x, self.y = intermediate_x, intermediate_y
+                self.theta = intermediate_theta
+                
+                # 添加到路径
+                self.path.append((self.x, self.y))
+                if len(self.path) > 1000:  # 限制路径长度
+                    self.path = self.path[-1000:]
+                    
+                # 标记当前位置为已访问
+                current_cell = (int(round(self.x)), int(round(self.y)))
+                self.visited_cells.add(current_cell)
+                
+                # 更新迷宫单元格状态（对中间点也更新）
+                self.update_maze_cells()
+        
+        # 更新到最终位置
         self.x, self.y = new_x, new_y
         self.theta = new_theta
             
@@ -331,7 +372,9 @@ class Robot:
                 
                 if path:
                     print(f"找到到终点的路径，长度: {len(path)}")
-                    self.goal_path = path[1:]  # 跳过起点
+                    # 确保路径连续
+                    processed_path = self.process_path_to_cardinal_directions(path)
+                    self.goal_path = processed_path[1:]  # 跳过起点
                     return True
         
         # 优先尝试沿着当前前进方向继续探索
@@ -397,8 +440,10 @@ class Robot:
         
         if path and len(path) > 1:
             print(f"找到路径，长度: {len(path)}")
+            # 确保路径连续
+            processed_path = self.process_path_to_cardinal_directions(path)
             # 设置目标路径
-            self.goal_path = path
+            self.goal_path = processed_path
             return True
         elif len(path) == 1 and path[0] == current_pos:
             print(f"当前位置就是目标位置，无需移动")
@@ -434,7 +479,9 @@ class Robot:
                 while current in came_from:
                     current = came_from[current]
                     path.append(current)
-                return path[::-1]  # 反转路径
+                # 反转路径并确保连续性
+                raw_path = path[::-1]
+                return self.process_path_to_cardinal_directions(raw_path)
             
             open_set.remove(current)
             closed_set.add(current)
@@ -498,7 +545,9 @@ class Robot:
                 while current in came_from:
                     current = came_from[current]
                     path.append(current)
-                return path[::-1]  # 反转路径
+                # 反转路径并确保连续性
+                raw_path = path[::-1]
+                return self.process_path_to_cardinal_directions(raw_path)
             
             open_set.remove(current)
             closed_set.add(current)
@@ -553,7 +602,9 @@ class Robot:
                 path2 = self.find_intermediate_path(mid_point, goal)
                 if path1 and path2:
                     # 合并路径（去掉重复的中间点）
-                    return path1[:-1] + path2
+                    combined_path = path1[:-1] + path2
+                    # 确保合并后的路径连续性
+                    return self.process_path_to_cardinal_directions(combined_path)
         
         return None  # 没有找到路径
     
@@ -594,6 +645,39 @@ class Robot:
                 # 如果是基本移动（上下左右），直接添加
                 processed_path.append(current)
         
+        # 确保路径中相邻点之间的距离不超过1（防止跳格子）
+        i = 0
+        while i < len(processed_path) - 1:
+            p1 = processed_path[i]
+            p2 = processed_path[i + 1]
+            dx = p2[0] - p1[0]
+            dy = p2[1] - p1[1]
+            distance = abs(dx) + abs(dy)
+            
+            # 如果相邻点之间的曼哈顿距离大于1，插入中间点
+            if distance > 1:
+                # 确定需要插入的中间点数量
+                steps = distance
+                new_points = []
+                
+                for step in range(1, steps):
+                    # 计算中间点位置（按比例插值）
+                    ratio = step / steps
+                    mid_x = int(round(p1[0] + dx * ratio))
+                    mid_y = int(round(p1[1] + dy * ratio))
+                    mid_point = (mid_x, mid_y)
+                    
+                    # 确保中间点不是障碍物
+                    if mid_point not in self.env.obstacles:
+                        new_points.append(mid_point)
+                
+                # 插入中间点
+                if new_points:
+                    processed_path[i+1:i+1] = new_points
+                    i += len(new_points)
+            
+            i += 1
+        
         return processed_path
     
     def navigate_to_goal(self):
@@ -624,15 +708,42 @@ class Robot:
             # 如果找到了最近的点，从那里继续导航
             if min_dist < 5:  # 设置一个合理的阈值
                 print(f"找到最近的路径点: {self.goal_path[closest_idx]}，距离: {min_dist}")
+                
+                # 如果距离大于1，需要先规划到该点的路径
+                if min_dist > 1:
+                    print(f"距离大于1，需要先规划到路径点的路径")
+                    closest_point = self.goal_path[closest_idx]
+                    path_to_closest = self.plan_path(current_pos, closest_point)
+                    
+                    if path_to_closest and len(path_to_closest) > 1:
+                        print(f"找到到最近路径点的路径，长度: {len(path_to_closest)}")
+                        # 使用新规划的路径（跳过起点）加上原始路径的剩余部分
+                        self.goal_path = path_to_closest[1:] + self.goal_path[closest_idx:]
+                        return True
+                    else:
+                        print(f"无法规划到最近路径点的路径")
+                
                 # 从最近的点开始导航
                 self.goal_path = self.goal_path[closest_idx:]
                 if len(self.goal_path) <= 1:
                     print("已经到达目标点附近")
                     return False
+                return True
             else:
                 # 如果最近的点也很远，尝试直接移动到目标方向
                 print("最近的路径点也很远，尝试直接移动到目标方向")
                 goal = self.goal_path[-1]  # 目标位置
+                
+                # 规划一条新的路径到目标
+                print(f"重新规划到目标 {goal} 的路径")
+                new_path = self.plan_path(current_pos, goal)
+                
+                if new_path and len(new_path) > 1:
+                    print(f"找到新的到目标的路径，长度: {len(new_path)}")
+                    self.goal_path = new_path[1:]  # 跳过起点
+                    return True
+                
+                # 如果无法规划新路径，尝试单步移动到目标方向
                 dx = goal[0] - current_x
                 dy = goal[1] - current_y
                 
@@ -694,6 +805,20 @@ class Robot:
             
             # 如果找到了最近的点，从那里继续导航
             if min_dist < 3 and closest_idx < len(self.goal_path) - 1:
+                # 如果距离大于1，需要先规划到该点的路径
+                if min_dist > 1:
+                    print(f"距离大于1，需要先规划到路径点的路径")
+                    closest_point = self.goal_path[closest_idx]
+                    path_to_closest = self.plan_path(current_pos, closest_point)
+                    
+                    if path_to_closest and len(path_to_closest) > 1:
+                        print(f"找到到最近路径点的路径，长度: {len(path_to_closest)}")
+                        # 使用新规划的路径（跳过起点）加上原始路径的剩余部分
+                        self.goal_path = path_to_closest[1:] + self.goal_path[closest_idx:]
+                        return True
+                    else:
+                        print(f"无法规划到最近路径点的路径")
+                
                 next_pos = self.goal_path[closest_idx + 1]
                 print(f"从最近的路径点 {self.goal_path[closest_idx]} 继续导航到 {next_pos}")
             else:
@@ -881,9 +1006,6 @@ class Robot:
         if self.goal_path:
             # 获取路径上的下一个点
             next_point = self.goal_path[0]
-            self.goal_path.pop(0)
-            
-            print(f"移动到路径的下一个点 {next_point}")
             
             # 检查下一个点是否可达
             if (next_point[0], next_point[1]) in self.env.obstacles:
@@ -891,8 +1013,37 @@ class Robot:
                 self.goal_path = []  # 清空路径，下次会重新规划
                 return False
             
-            # 更新位置
+            # 检查当前位置到下一个点的距离
             current_cell = (int(round(self.x)), int(round(self.y)))
+            distance_to_next = abs(next_point[0] - current_cell[0]) + abs(next_point[1] - current_cell[1])
+            
+            # 如果距离大于1，说明不是相邻点，需要先规划到该点的路径
+            if distance_to_next > 1:
+                print(f"当前位置 {current_cell} 与路径点 {next_point} 距离为 {distance_to_next}，需要先规划到该点的路径")
+                # 保存原始路径
+                original_path = self.goal_path.copy()
+                # 规划到第一个点的路径
+                path_to_first = self.plan_path(current_cell, next_point)
+                
+                if path_to_first and len(path_to_first) > 1:
+                    print(f"找到到路径点的路径，长度: {len(path_to_first)}")
+                    # 使用新规划的路径（跳过起点）加上原始路径的剩余部分
+                    self.goal_path = path_to_first[1:] + original_path[1:]
+                    # 重新尝试移动
+                    return self.move_to_next_target()
+                else:
+                    print(f"无法规划到路径点 {next_point} 的路径，跳过该点")
+                    self.goal_path.pop(0)  # 移除无法到达的点
+                    if not self.goal_path:
+                        return False
+                    return self.move_to_next_target()
+            
+            # 移除已处理的点
+            self.goal_path.pop(0)
+            
+            print(f"移动到路径的下一个点 {next_point}")
+            
+            # 更新位置
             dx = next_point[0] - current_cell[0]
             dy = next_point[1] - current_cell[1]
             target_theta = math.atan2(dy, dx)
@@ -944,7 +1095,9 @@ class Robot:
             
             if path:
                 print(f"找到路径，长度: {len(path)}")
-                self.goal_path = path[1:]  # 跳过起点
+                # 确保路径连续
+                processed_path = self.process_path_to_cardinal_directions(path)
+                self.goal_path = processed_path[1:]  # 跳过起点
                 return self.move_to_next_target()  # 递归调用，沿着路径移动
             else:
                 print(f"无法找到到 {target} 的路径，标记为失败目标")
@@ -1115,7 +1268,9 @@ class Robot:
                     path.append(current)
                 path.reverse()
                 print(f"找到路径，长度: {len(path)}")
-                return path
+                # 处理路径，确保连续性
+                processed_path = self.process_path_to_cardinal_directions(path)
+                return processed_path
                 
             # 将当前节点加入关闭列表
             closed_set.add(current)
@@ -1186,7 +1341,9 @@ class Robot:
                     current = came_from[current]
                     path.insert(0, current)
                 print(f"找到接近目标的路径，长度: {len(path)}")
-                return path
+                # 处理路径，确保连续性
+                processed_path = self.process_path_to_cardinal_directions(path)
+                return processed_path
                 
             # 将当前节点加入关闭列表
             closed_set.add(current)
