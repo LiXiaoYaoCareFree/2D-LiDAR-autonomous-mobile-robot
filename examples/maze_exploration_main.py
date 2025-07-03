@@ -130,10 +130,13 @@ class MazeExplorationController:
                 print(f"探索时间: {elapsed_time:.1f}秒 / {self.max_exploration_time}秒")
             
             # 检查是否已经找到目标
-            dist_to_goal = math.sqrt((self.robot.x - self.maze_env.goal_pos[0])**2 + 
-                                     (self.robot.y - self.maze_env.goal_pos[1])**2)
+            # 计算当前位置到目标的距离
+            goal_x, goal_y = self.maze_env.goal_pos[0], self.maze_env.goal_pos[1]
+            dist_to_goal = math.sqrt((self.robot.x - goal_x)**2 + (self.robot.y - goal_y)**2)
+            
+            # 当机器人靠近目标时，视为找到目标
             if dist_to_goal <= self.goal_detection_distance and not self.goal_found:
-                print("\n===== 发现目标点！=====\n")
+                print(f"\n===== 发现目标点！({goal_x}, {goal_y}) =====\n")
                 self.goal_found = True
                 
             # 检查是否达到探索阈值
@@ -178,10 +181,11 @@ class MazeExplorationController:
         elif self.current_state == "navigate_to_goal":
             # 导航到目标点阶段
             # 检查是否已到达目标
-            dist_to_goal = math.sqrt((self.robot.x - self.maze_env.goal_pos[0])**2 + 
-                                     (self.robot.y - self.maze_env.goal_pos[1])**2)
+            goal_x, goal_y = self.maze_env.goal_pos[0], self.maze_env.goal_pos[1]
+            dist_to_goal = math.sqrt((self.robot.x - goal_x)**2 + (self.robot.y - goal_y)**2)
+            
             if dist_to_goal <= 1.0:
-                print("\n===== 阶段转换：已到达目标点！=====\n")
+                print(f"\n===== 阶段转换：已到达目标点！({goal_x}, {goal_y}) =====\n")
                 self.reached_goal = True
                 self.current_state = "path_planning"
                 # 重置导航重试计数
@@ -469,6 +473,12 @@ def main():
     
     # 创建迷宫环境
     maze_env = MazeEnvironment(width=args.width, height=args.height, json_file=json_file)
+    
+    # 输出环境信息
+    print(f"机器人初始化在位置 ({maze_env.start_pos[0]}, {maze_env.start_pos[1]})")
+    print(f"环境大小: {maze_env.width}x{maze_env.height}")
+    print(f"目标位置: ({maze_env.goal_pos[0]}, {maze_env.goal_pos[1]})")
+    print(f"可访问单元格总数: {len([1 for x in range(maze_env.width) for y in range(maze_env.height) if (x, y) not in maze_env.grid_env.obstacles])}")
     
     # 创建并运行控制器
     controller = MazeExplorationController(maze_env)

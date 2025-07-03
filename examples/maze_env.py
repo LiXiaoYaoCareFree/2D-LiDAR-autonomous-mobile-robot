@@ -33,6 +33,10 @@ class MazeEnvironment:
         # 如果提供了JSON文件，则从文件加载迷宫
         self.json_file = json_file
         if json_file and os.path.exists(json_file):
+            # 检查是否是迷宫3，如果是，则特别设置终点位置
+            if "3.json" in json_file:
+                self.goal_pos = (20, 15)  # 为迷宫3特别设置终点位置
+                
             self.grid_env = self.load_maze_from_json_file()
         else:
             self.grid_env = self.create_grid_env()
@@ -68,6 +72,15 @@ class MazeEnvironment:
                 if (x, y) not in obstacles:
                     accessible_cells += 1
         print(f"可访问单元格总数: {accessible_cells}")
+        
+        # 输出终点位置信息
+        print(f"目标位置设置为: ({self.goal_pos[0]}, {self.goal_pos[1]})")
+        
+        # 确保终点不是障碍物
+        if (self.goal_pos[0], self.goal_pos[1]) in obstacles:
+            obstacles.remove((self.goal_pos[0], self.goal_pos[1]))
+            print(f"已移除终点位置的障碍物")
+            grid_env.update(obstacles)
         
         return grid_env
         
@@ -123,7 +136,7 @@ class MazeEnvironment:
                 stack.pop()
         
         # 确保起点和终点不是障碍物
-        goal_x, goal_y = self.width-2, self.height-2
+        goal_x, goal_y = self.goal_pos
         obstacles.discard((1, 1))
         obstacles.discard((goal_x, goal_y))
         
