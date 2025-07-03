@@ -26,16 +26,16 @@ class MazeEnvironment:
         self.width = width
         self.height = height
         
+        # 设置默认起点和终点
+        self.start_pos = (1, 1, 0)  # 默认起点 (x, y, theta)
+        self.goal_pos = (self.width-2, self.height-2)  # 默认目标位置在右下角
+        
         # 如果提供了JSON文件，则从文件加载迷宫
         self.json_file = json_file
         if json_file and os.path.exists(json_file):
             self.grid_env = self.load_maze_from_json_file()
         else:
             self.grid_env = self.create_grid_env()
-            
-        # 设置起点和终点
-        self.start_pos = (1, 1, 0)  # 默认起点 (x, y, theta)
-        self.goal_pos = (self.width-2, self.height-2)  # 默认目标位置在右下角
     
     def load_maze_from_json_file(self):
         """从JSON文件加载迷宫"""
@@ -44,8 +44,9 @@ class MazeEnvironment:
         # 加载迷宫数据
         obstacles, start_pos, _ = load_maze_from_json(self.json_file, self.width, self.height)
         
-        # 更新起点
+        # 更新起点 - 确保正确使用JSON文件中的起点
         self.start_pos = start_pos
+        print(f"机器人初始化在位置 ({self.start_pos[0]}, {self.start_pos[1]})")
         
         # 创建网格环境
         grid_env = Grid(self.width, self.height)
@@ -59,6 +60,15 @@ class MazeEnvironment:
         grid_env.is_obstacle = is_obstacle
         
         print(f"迷宫加载完成，障碍物数量: {len(obstacles)}")
+        
+        # 计算可访问单元格总数（用于探索进度计算）
+        accessible_cells = 0
+        for x in range(self.width):
+            for y in range(self.height):
+                if (x, y) not in obstacles:
+                    accessible_cells += 1
+        print(f"可访问单元格总数: {accessible_cells}")
+        
         return grid_env
         
     def create_grid_env(self):

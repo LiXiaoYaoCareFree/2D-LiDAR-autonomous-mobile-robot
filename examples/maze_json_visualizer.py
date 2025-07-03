@@ -30,8 +30,9 @@ def visualize_json_maze(json_file, width=15, height=15, save_path=None):
     plt.imshow(grid.T, cmap='binary', origin='lower')
     plt.grid(True, color='gray', linestyle='-', linewidth=0.5)
     
-    # 标记起点
-    plt.plot(start_pos[0], start_pos[1], 'go', markersize=10)
+    # 标记起点 - 只显示起点，终点不预先标注
+    plt.plot(start_pos[0], start_pos[1], 'go', markersize=10, label='起点')
+    plt.legend()
     
     # 添加标题和标签
     plt.title(f"迷宫从JSON文件加载: {os.path.basename(json_file)}")

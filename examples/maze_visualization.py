@@ -64,11 +64,9 @@ class MazeVisualization:
             self.ax1.add_patch(Rectangle((obs[0]-0.5, obs[1]-0.5), 1, 1, color='black'))
             self.ax2.add_patch(Rectangle((obs[0]-0.5, obs[1]-0.5), 1, 1, color='black'))
         
-        # 绘制起点和终点
+        # 绘制起点 - 只显示起点，终点在探索过程中发现后才显示
         self.ax1.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=8, label='起点')
         self.ax2.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=8, label='起点')
-        self.ax1.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=8, label='终点')
-        self.ax2.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=8, label='终点')
         
         # 添加图例
         self.ax1.legend()
@@ -160,11 +158,14 @@ class MazeVisualization:
             self.ax1.add_patch(Rectangle((obs[0] - 0.5, obs[1] - 0.5), 1, 1, color='black'))
             self.ax2.add_patch(Rectangle((obs[0] - 0.5, obs[1] - 0.5), 1, 1, color='black'))
         
-        # 绘制起点和终点
+        # 绘制起点
         self.ax1.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=10)  # 绿色起点
-        self.ax1.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)    # 红色终点
         self.ax2.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=10)  # 绿色起点
-        self.ax2.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)    # 红色终点
+        
+        # 只有在目标被发现后才绘制终点
+        if hasattr(self, 'controller') and hasattr(self.controller, 'goal_found') and self.controller.goal_found:
+            self.ax1.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)  # 红色终点
+            self.ax2.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)  # 红色终点
         
         # 绘制机器人位置
         self.ax1.plot(self.robot.x, self.robot.y, 'bo', markersize=8)  # 蓝色机器人
@@ -195,25 +196,25 @@ class MazeVisualization:
                     self.ax2.add_patch(Rectangle((cell[0] - 0.5, cell[1] - 0.5), 1, 1, color='yellow', alpha=0.3))
         
         # 绘制规划的路径
-        if hasattr(self, 'current_state') and self.current_state in ["navigation", "navigate_to_goal"] and hasattr(self.robot, 'goal_path') and self.robot.goal_path:
+        if hasattr(self, 'controller') and hasattr(self.controller, 'current_state') and self.controller.current_state in ["navigation", "navigate_to_goal"] and hasattr(self.robot, 'goal_path') and self.robot.goal_path:
             path_x = [p[0] for p in self.robot.goal_path]
             path_y = [p[1] for p in self.robot.goal_path]
             self.ax2.plot(path_x, path_y, 'g-', linewidth=2)  # 绿色路径线
         
         # 添加标题
         self.ax1.set_title('机器人视角')
-        if hasattr(self, 'current_state'):
-            if self.current_state == "exploration":
+        if hasattr(self, 'controller') and hasattr(self.controller, 'current_state'):
+            if self.controller.current_state == "exploration":
                 self.ax2.set_title(f'迷宫地图 - 探索阶段 ({self.robot.exploration_progress:.1f}%)')
-            elif self.current_state == "search_goal":
+            elif self.controller.current_state == "search_goal":
                 self.ax2.set_title('迷宫地图 - 搜索目标点阶段')
-            elif self.current_state == "navigate_to_goal":
+            elif self.controller.current_state == "navigate_to_goal":
                 self.ax2.set_title('迷宫地图 - 导航到目标点阶段')
-            elif self.current_state == "path_planning":
+            elif self.controller.current_state == "path_planning":
                 self.ax2.set_title('迷宫地图 - 规划返回路径阶段')
-            elif self.current_state == "navigation":
+            elif self.controller.current_state == "navigation":
                 self.ax2.set_title('迷宫地图 - 返回起点阶段')
-            elif self.current_state == "completed":
+            elif self.controller.current_state == "completed":
                 self.ax2.set_title('迷宫地图 - 探索完成')
         else:
             self.ax2.set_title('迷宫地图')
@@ -311,11 +312,11 @@ class MazeVisualization:
         self.info_text.set_text(info_str)
         
         # 更新状态显示
-        if self.current_state == "exploration":
+        if self.controller.current_state == "exploration":
             status = "探索中"
-        elif self.current_state == "path_planning":
+        elif self.controller.current_state == "path_planning":
             status = "路径规划中"
-        elif self.current_state == "navigation":
+        elif self.controller.current_state == "navigation":
             status = "导航中"
         else:
             status = "完成"
