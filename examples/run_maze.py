@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     # 导入主程序
-    from maze_exploration_main import MazeExploration
+    from maze_exploration_main import MazeExplorationController
     
     print("="*60)
     print("迷宫探索与路径规划演示程序")
@@ -44,7 +44,7 @@ try:
     input()
     
     # 创建并运行迷宫探索
-    maze_exploration = MazeExploration()
+    maze_exploration = MazeExplorationController()
     maze_exploration.run()
     
 except Exception as e:
