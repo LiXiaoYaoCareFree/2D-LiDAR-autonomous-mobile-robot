@@ -1,43 +1,87 @@
-# 自主移动机器人迷宫测绘与导航
+# 迷宫探索与路径规划
 
-## 项目说明
+本项目实现了一个迷宫探索与路径规划系统，支持从JSON文件加载预定义迷宫，进行探索、路径规划和导航。
 
-本项目实现了一个基于二维激光雷达的自主移动机器人迷宫测绘与导航系统。该系统能够模拟机器人在未知环境中自主探索、地图构建和路径规划功能。
+## 功能特点
 
-## 主要功能
-
-1. **环境探索**: 使用深度优先搜索(DFS)算法进行环境探索
-2. **激光雷达模拟**: 模拟2D激光雷达扫描功能，获取周围环境信息
-3. **实时地图构建**: 根据激光雷达数据实时构建栅格地图
-4. **目标检测**: 当机器人接近目标位置时自动识别
-5. **路径规划**: 使用A*算法进行最优路径规划
-6. **可视化展示**: 提供双视图展示，左侧为实时探索过程，右侧为构建的栅格地图
+- 支持从JSON文件加载预定义迷宫地图
+- 支持随机生成迷宫
+- 实现了迷宫探索算法
+- 实现了A*路径规划算法
+- 支持机器人连续移动，避免跳格子现象
+- 可视化迷宫探索和路径规划过程
 
 ## 文件说明
 
-- `maze_exploration.py`: 主程序文件
-  - `LaserSensor`: 模拟2D激光雷达
-  - `Robot`: 自主移动机器人类
-  - `MazeExploration`: 迷宫测绘与导航系统类
+- `maze_env.py`: 迷宫环境类，支持从JSON文件加载迷宫
+- `maze_robot.py`: 机器人类，实现了探索和导航功能
+- `maze_exploration_main.py`: 主程序，控制迷宫探索和导航流程
+- `maze_visualization.py`: 可视化模块，显示迷宫探索和导航过程
+- `maze_json_loader.py`: JSON迷宫加载器，从JSON文件加载迷宫数据
+- `maze_json_test.py`: 测试从JSON文件加载迷宫
+- `maze_json_visualizer.py`: 可视化JSON文件中定义的迷宫
 
 ## 使用方法
 
+### 运行迷宫探索
+
 ```bash
-python examples/maze_exploration.py
+# 使用预定义的迷宫1
+python maze_exploration_main.py --maze-id 1
+
+# 使用预定义的迷宫2
+python maze_exploration_main.py --maze-id 2
+
+# 使用预定义的迷宫3
+python maze_exploration_main.py --maze-id 3
+
+# 使用自定义JSON迷宫文件
+python maze_exploration_main.py --json path/to/your/maze.json
+
+# 使用随机生成的迷宫
+python maze_exploration_main.py
 ```
 
-## 运行效果
+### 可视化JSON迷宫
 
-1. 机器人从起点(绿色点)开始，进行DFS探索
-2. 左侧显示实时探索过程，机器人的移动轨迹用绿线表示
-3. 右侧显示栅格地图，已探索区域会移除阴影覆盖
-4. 当机器人发现目标(红色星形)时，会停止探索
-5. 使用A*算法规划从目标返回起点的最优路径(红线)
+```bash
+# 可视化预定义的迷宫1
+python maze_json_visualizer.py --maze-id 1
 
-## 技术特点
+# 可视化自定义JSON迷宫文件
+python maze_json_visualizer.py --json path/to/your/maze.json
 
-1. 使用光线投射算法模拟激光雷达扫描
-2. 实现了深度优先搜索进行环境探索
-3. 集成A*算法进行最优路径规划
-4. 双视图可视化展示
-5. 使用阴影覆盖表示未探索区域 
+# 保存迷宫图像
+python maze_json_visualizer.py --maze-id 2 --save maze2.png
+```
+
+## JSON迷宫格式
+
+JSON迷宫文件格式如下：
+
+```json
+{
+  "segments": [
+    {"start": [x1, y1], "end": [x2, y2]},
+    ...
+  ],
+  "start_point": [x, y]
+}
+```
+
+- `segments`: 迷宫墙壁线段列表，每个线段由起点和终点定义
+- `start_point`: 机器人起始位置
+
+## 示例
+
+项目包含三个预定义的迷宫示例：
+
+1. `json_data/1.json`: 简单迷宫，15x15大小
+2. `json_data/2.json`: 中等复杂度迷宫，15x15大小
+3. `json_data/3.json`: 复杂迷宫，21x21大小
+
+## 算法说明
+
+- **迷宫探索**: 使用深度优先搜索(DFS)策略探索未知迷宫
+- **路径规划**: 使用A*算法规划从当前位置到目标位置的最短路径
+- **连续移动**: 实现了插值移动算法，确保机器人移动连续，避免跳格子现象 
