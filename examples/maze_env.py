@@ -8,23 +8,58 @@
 
 import numpy as np
 import random
+import os
 from python_motion_planning.utils.environment.env import Grid
+from maze_json_loader import load_maze_from_json
 
 class MazeEnvironment:
     """迷宫环境类"""
-    def __init__(self, width=15, height=15):
+    def __init__(self, width=15, height=15, json_file=None):
         """初始化迷宫环境
         
         Args:
             width: 迷宫宽度，默认15
             height: 迷宫高度，默认15
+            json_file: JSON迷宫文件路径，如果提供则从文件加载迷宫
         """
-        # 确保迷宫大小不超过16x16
-        self.width = min(width, 15)
-        self.height = min(height, 15)
-        self.grid_env = self.create_grid_env()
-        self.start_pos = (1, 1, 0)  # (x, y, theta)
-        self.goal_pos = (self.width-2, self.height-2)  # 目标位置在右下角
+        # 确保迷宫大小不超过16x16，除非是从JSON加载的大迷宫
+        self.width = width
+        self.height = height
+        
+        # 如果提供了JSON文件，则从文件加载迷宫
+        self.json_file = json_file
+        if json_file and os.path.exists(json_file):
+            self.grid_env = self.load_maze_from_json_file()
+        else:
+            self.grid_env = self.create_grid_env()
+            
+        # 设置起点和终点
+        self.start_pos = (1, 1, 0)  # 默认起点 (x, y, theta)
+        self.goal_pos = (self.width-2, self.height-2)  # 默认目标位置在右下角
+    
+    def load_maze_from_json_file(self):
+        """从JSON文件加载迷宫"""
+        print(f"从JSON文件加载迷宫: {self.json_file}")
+        
+        # 加载迷宫数据
+        obstacles, start_pos, _ = load_maze_from_json(self.json_file, self.width, self.height)
+        
+        # 更新起点
+        self.start_pos = start_pos
+        
+        # 创建网格环境
+        grid_env = Grid(self.width, self.height)
+        grid_env.update(obstacles)
+        
+        # 为Grid类添加is_obstacle方法
+        def is_obstacle(x, y):
+            return (x, y) in obstacles
+        
+        # 动态添加方法到grid_env实例
+        grid_env.is_obstacle = is_obstacle
+        
+        print(f"迷宫加载完成，障碍物数量: {len(obstacles)}")
+        return grid_env
         
     def create_grid_env(self):
         """创建栅格环境"""

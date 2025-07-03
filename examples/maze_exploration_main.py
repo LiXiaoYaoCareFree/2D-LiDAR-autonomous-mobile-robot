@@ -9,6 +9,7 @@ import time
 import math
 import sys
 import os
+import argparse
 
 # 导入自定义模块
 from maze_env import MazeEnvironment
@@ -17,9 +18,9 @@ from maze_visualization import MazeVisualization
 
 class MazeExplorationController:
     """迷宫探索控制器"""
-    def __init__(self):
-        # 创建环境
-        self.maze_env = MazeEnvironment()
+    def __init__(self, maze_env):
+        # 设置环境
+        self.maze_env = maze_env
         
         # 创建机器人
         self.robot = Robot(self.maze_env.start_pos, self.maze_env.grid_env)
@@ -306,12 +307,15 @@ class MazeExplorationController:
         visualization.update_visualization()
         
     def run(self):
-        """运行迷宫测绘与导航"""
+        """运行控制器"""
         # 创建可视化
-        visualization = MazeVisualization(self.maze_env, self.robot)
+        visualization = self.visualizer
         
-        # 运行动画
-        visualization.run_animation(self)
+        # 启动动画
+        if hasattr(visualization, 'start_animation'):
+            visualization.start_animation()
+        else:
+            visualization.run_animation(self)
 
     def run_exploration(self):
         """运行迷宫探索"""
@@ -438,17 +442,37 @@ class MazeExplorationController:
 
 def main():
     """主函数"""
-    # 创建控制器
-    controller = MazeExplorationController()
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='迷宫探索与路径规划')
+    parser.add_argument('--json', type=str, help='JSON迷宫文件路径，如果不提供则使用随机生成的迷宫')
+    parser.add_argument('--maze-id', type=int, choices=[1, 2, 3], help='使用预定义的迷宫ID (1, 2, 3)')
+    parser.add_argument('--width', type=int, default=15, help='迷宫宽度，默认15')
+    parser.add_argument('--height', type=int, default=15, help='迷宫高度，默认15')
+    args = parser.parse_args()
     
-    # 创建可视化
-    visualization = controller.visualizer
+    # 确定迷宫文件路径
+    json_file = None
     
-    # 启动动画
-    if hasattr(visualization, 'start_animation'):
-        visualization.start_animation()
-    else:
-        visualization.run_animation(controller)
+    if args.maze_id:
+        # 获取当前文件所在目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        json_file = os.path.join(current_dir, 'json_data', f'{args.maze_id}.json')
+        print(f"使用预定义迷宫 {args.maze_id}: {json_file}")
+        
+        # 根据迷宫ID调整宽度和高度
+        if args.maze_id == 3:
+            args.width = 21
+            args.height = 21
+    elif args.json:
+        json_file = args.json
+        print(f"使用自定义迷宫文件: {json_file}")
+    
+    # 创建迷宫环境
+    maze_env = MazeEnvironment(width=args.width, height=args.height, json_file=json_file)
+    
+    # 创建并运行控制器
+    controller = MazeExplorationController(maze_env)
+    controller.run()
 
 if __name__ == "__main__":
     main() 
