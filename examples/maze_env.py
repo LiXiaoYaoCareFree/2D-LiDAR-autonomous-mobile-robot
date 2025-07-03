@@ -73,6 +73,14 @@ class MazeEnvironment:
                     accessible_cells += 1
         print(f"可访问单元格总数: {accessible_cells}")
         
+        # 检查JSON文件中是否包含目标点
+        import json
+        with open(self.json_file, 'r') as f:
+            data = json.load(f)
+            if 'goal_point' in data:
+                self.goal_pos = tuple(data['goal_point'])
+                print(f"从JSON文件加载目标位置: ({self.goal_pos[0]}, {self.goal_pos[1]})")
+        
         # 输出终点位置信息
         print(f"目标位置设置为: ({self.goal_pos[0]}, {self.goal_pos[1]})")
         

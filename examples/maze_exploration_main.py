@@ -585,9 +585,14 @@ def main():
         print(f"使用预定义迷宫 {args.maze_id}: {json_file}")
         
         # 根据迷宫ID调整宽度和高度
-        if args.maze_id == 3:
+        if args.maze_id == 2:
+            args.width = 16
+            args.height = 16
+            print(f"将迷宫2的大小调整为 {args.width}x{args.height}")
+        elif args.maze_id == 3:
             args.width = 21
             args.height = 21
+            print(f"将迷宫3的大小调整为 {args.width}x{args.height}")
     elif args.json:
         json_file = args.json
         print(f"使用自定义迷宫文件: {json_file}")
