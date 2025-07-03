@@ -13,6 +13,7 @@ from matplotlib.animation import FuncAnimation
 import time
 import math
 from matplotlib.font_manager import FontProperties
+from matplotlib import colors
 
 # 尝试设置中文字体
 try:
@@ -45,7 +46,7 @@ class MazeVisualization:
     def setup_visualization(self):
         """设置可视化"""
         # 创建图形和子图
-        self.fig, (self.ax1, self.ax2) = plt.subplots(1, 2, figsize=(15, 7))
+        self.fig, (self.ax1, self.ax2, self.ax3) = plt.subplots(1, 3, figsize=(20, 7))
         
         # 设置第一个子图（实时探索）
         self.ax1.set_xlim(0, self.grid_env.x_range)
@@ -58,6 +59,12 @@ class MazeVisualization:
         self.ax2.set_ylim(0, self.grid_env.y_range)
         self.ax2.set_title("迷宫地图")
         self.ax2.set_aspect('equal')
+        
+        # 设置第三个子图（SLAM地图）
+        self.ax3.set_xlim(-2, self.grid_env.x_range + 2)
+        self.ax3.set_ylim(-2, self.grid_env.y_range + 2)
+        self.ax3.set_title("SLAM地图")
+        self.ax3.set_aspect('equal')
         
         # 绘制障碍物
         for obs in self.grid_env.obstacles:
@@ -76,6 +83,7 @@ class MazeVisualization:
         start_x, start_y = self.robot.x, self.robot.y
         self.robot_marker1, = self.ax1.plot([start_x], [start_y], 'bo', markersize=8)
         self.robot_marker2, = self.ax2.plot([start_x], [start_y], 'bo', markersize=8)
+        self.robot_marker3, = self.ax3.plot([start_x], [start_y], 'bo', markersize=8)
         
         # 初始化机器人方向指示
         length = 1.0
@@ -87,6 +95,7 @@ class MazeVisualization:
         # 初始化路径
         self.path_line1, = self.ax1.plot([], [], 'c-', linewidth=1, alpha=0.5)
         self.path_line2, = self.ax2.plot([], [], 'c-', linewidth=1, alpha=0.5)
+        self.path_line3, = self.ax3.plot([], [], 'c-', linewidth=1, alpha=0.5)
         
         # 初始化最优路径
         self.optimal_path_line1, = self.ax1.plot([], [], 'g-', linewidth=2)
@@ -146,12 +155,18 @@ class MazeVisualization:
         # 清除之前的绘图
         self.ax1.clear()
         self.ax2.clear()
+        self.ax3.clear()
         
         # 设置坐标轴范围
         self.ax1.set_xlim(0, self.grid_env.x_range)
         self.ax1.set_ylim(0, self.grid_env.y_range)
         self.ax2.set_xlim(0, self.grid_env.x_range)
         self.ax2.set_ylim(0, self.grid_env.y_range)
+        self.ax3.set_xlim(-2, self.grid_env.x_range + 2)
+        self.ax3.set_ylim(-2, self.grid_env.y_range + 2)
+        
+        # 设置SLAM地图的背景为灰色
+        self.ax3.set_facecolor('#e0e0e0')
         
         # 绘制障碍物
         for obs in self.grid_env.obstacles:
@@ -161,21 +176,25 @@ class MazeVisualization:
         # 绘制起点
         self.ax1.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=10)  # 绿色起点
         self.ax2.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=10)  # 绿色起点
+        self.ax3.plot(self.start_pos[0], self.start_pos[1], 'go', markersize=10)  # 绿色起点
         
         # 只有在目标被发现后才绘制终点
         if hasattr(self, 'controller') and hasattr(self.controller, 'goal_found') and self.controller.goal_found:
             self.ax1.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)  # 红色终点
             self.ax2.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)  # 红色终点
+            self.ax3.plot(self.goal_pos[0], self.goal_pos[1], 'ro', markersize=10)  # 红色终点
         
         # 绘制机器人位置
         self.ax1.plot(self.robot.x, self.robot.y, 'bo', markersize=8)  # 蓝色机器人
         self.ax2.plot(self.robot.x, self.robot.y, 'bo', markersize=8)  # 蓝色机器人
+        self.ax3.plot(self.robot.x, self.robot.y, 'bo', markersize=8)  # 蓝色机器人
         
         # 绘制机器人朝向
         direction_length = 1.0
         dx = direction_length * math.cos(self.robot.theta)
         dy = direction_length * math.sin(self.robot.theta)
         self.ax1.arrow(self.robot.x, self.robot.y, dx, dy, head_width=0.3, head_length=0.3, fc='blue', ec='blue')
+        self.ax3.arrow(self.robot.x, self.robot.y, dx, dy, head_width=0.3, head_length=0.3, fc='blue', ec='blue')
         
         # 绘制激光传感器数据
         if hasattr(self.robot, 'sensor_data') and self.robot.sensor_data:
@@ -199,136 +218,54 @@ class MazeVisualization:
         if hasattr(self, 'controller') and hasattr(self.controller, 'current_state') and self.controller.current_state in ["navigation", "navigate_to_goal"] and hasattr(self.robot, 'goal_path') and self.robot.goal_path:
             path_x = [p[0] for p in self.robot.goal_path]
             path_y = [p[1] for p in self.robot.goal_path]
-            self.ax2.plot(path_x, path_y, 'g-', linewidth=2)  # 绿色路径线
+            self.ax1.plot(path_x, path_y, 'g-', linewidth=2)  # 绿色路径
+            self.ax2.plot(path_x, path_y, 'g-', linewidth=2)  # 绿色路径
+            # 不在SLAM地图上显示路径
         
-        # 添加标题
-        self.ax1.set_title('机器人视角')
-        if hasattr(self, 'controller') and hasattr(self.controller, 'current_state'):
-            if self.controller.current_state == "exploration":
-                self.ax2.set_title(f'迷宫地图 - 探索阶段 ({self.robot.exploration_progress:.1f}%)')
-            elif self.controller.current_state == "search_goal":
-                self.ax2.set_title('迷宫地图 - 搜索目标点阶段')
-            elif self.controller.current_state == "navigate_to_goal":
-                self.ax2.set_title('迷宫地图 - 导航到目标点阶段')
-            elif self.controller.current_state == "path_planning":
-                self.ax2.set_title('迷宫地图 - 规划返回路径阶段')
-            elif self.controller.current_state == "navigation":
-                self.ax2.set_title('迷宫地图 - 返回起点阶段')
-            elif self.controller.current_state == "completed":
-                self.ax2.set_title('迷宫地图 - 探索完成')
-        else:
-            self.ax2.set_title('迷宫地图')
-        
-        # 添加网格
-        self.ax1.grid(True)
-        self.ax2.grid(True)
-        
-        # 更新画布
-        self.fig.canvas.draw()
-        
-        # 更新机器人位置和方向
-        self.robot_marker1.set_data([self.robot.x], [self.robot.y])
-        self.robot_marker2.set_data([self.robot.x], [self.robot.y])
-        
-        dx = math.cos(self.robot.theta) * 1.0
-        dy = math.sin(self.robot.theta) * 1.0
-        self.direction_line1.set_data([self.robot.x, self.robot.x + dx], [self.robot.y, self.robot.y + dy])
-        self.direction_line2.set_data([self.robot.x, self.robot.x + dx], [self.robot.y, self.robot.y + dy])
-        
-        # 更新路径
-        if self.robot.path:
-            path_x, path_y = zip(*self.robot.path)
-            self.path_line1.set_data(path_x, path_y)
-            self.path_line2.set_data(path_x, path_y)
-        
-        # 更新探索地图 - 使用try-except处理可能的错误
-        try:
-            if hasattr(self, 'explored_scatter'):
-                self.explored_scatter.remove()
-        except:
-            pass  # 如果无法移除，就忽略错误
-        
-        if hasattr(self.robot, 'visited_cells') and self.robot.visited_cells:
-            explored_x, explored_y = zip(*self.robot.visited_cells)
-            self.explored_scatter = self.ax2.scatter(explored_x, explored_y, c='lightblue', s=5, alpha=0.8)
-        
-        # 更新迷宫格子状态 - 使用try-except处理可能的错误
-        try:
-            if hasattr(self, 'unknown_cells_scatter'):
-                self.unknown_cells_scatter.remove()
-        except:
-            pass  # 如果无法移除，就忽略错误
+        # 绘制SLAM地图
+        if hasattr(self, 'controller') and hasattr(self.controller, 'slam_visualizer'):
+            slam_viz = self.controller.slam_visualizer
             
-        try:
-            if hasattr(self, 'path_cells_scatter'):
-                self.path_cells_scatter.remove()
-        except:
-            pass  # 如果无法移除，就忽略错误
+            # 创建自定义颜色映射：灰色(未探索)、白色(空闲)、黑色(障碍物)
+            custom_cmap = colors.ListedColormap(['#e0e0e0', 'white', 'black'])
             
-        # 显示未知区域（灰色）和通路（浅蓝色）
-        if hasattr(self.robot, 'maze_cells'):
-            try:
-                # 显示未知区域（灰色）
-                unknown_cells = [(x, y) for (x, y), status in self.robot.maze_cells.items() if status == 0]
-                if unknown_cells:
-                    unknown_x, unknown_y = zip(*unknown_cells)
-                    self.unknown_cells_scatter = self.ax2.scatter(unknown_x, unknown_y, c='lightgray', s=5, alpha=0.5)
+            # 显示SLAM地图
+            self.ax3.imshow(slam_viz.slam_map.T, origin='lower', 
+                          extent=[-2, self.grid_env.x_range + 2, -2, self.grid_env.y_range + 2], 
+                          cmap=custom_cmap, alpha=1.0, vmin=0, vmax=2)
+            
+            # 不显示轨迹
+        
+        # 设置子图标题
+        self.ax1.set_title("机器人实时探索", fontsize=12, fontweight='bold')
+        self.ax2.set_title("迷宫地图", fontsize=12, fontweight='bold')
+        self.ax3.set_title("SLAM地图", fontsize=12, fontweight='bold')
+        
+        # 更新状态信息
+        if hasattr(self, 'controller'):
+            # 计算探索进度
+            exploration_progress = self.robot.exploration_progress if hasattr(self.robot, 'exploration_progress') else 0
+            
+            # 显示状态信息
+            status_text = f"状态: {self.controller.current_state}\n"
+            status_text += f"探索进度: {exploration_progress:.2f}%\n"
+            status_text += f"步数: {self.controller.step_count}\n"
+            
+            if hasattr(self.controller, 'goal_found'):
+                status_text += f"目标发现: {'是' if self.controller.goal_found else '否'}\n"
                 
-                # 显示通路（浅蓝色）
-                path_cells = [(x, y) for (x, y), status in self.robot.maze_cells.items() if status == 1]
-                if path_cells:
-                    path_x, path_y = zip(*path_cells)
-                    self.path_cells_scatter = self.ax2.scatter(path_x, path_y, c='lightblue', s=5, alpha=0.8)
-            except Exception as e:
-                print(f"处理maze_cells时出错: {e}")
+            if hasattr(self.controller, 'reached_goal'):
+                status_text += f"到达目标: {'是' if self.controller.reached_goal else '否'}\n"
+                
+            if hasattr(self.controller, 'returned_to_start'):
+                status_text += f"返回起点: {'是' if self.controller.returned_to_start else '否'}\n"
+                
+            self.status_text = self.ax1.text(0.02, 0.02, status_text, transform=self.ax1.transAxes, 
+                                          verticalalignment='bottom', fontsize=10, 
+                                          bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
         
-        # 更新最优路径
-        if hasattr(self.robot, 'goal_path') and self.robot.goal_path:
-            path_x, path_y = zip(*self.robot.goal_path)
-            self.optimal_path_line1.set_data(path_x, path_y)
-            self.optimal_path_line2.set_data(path_x, path_y)
-        
-        # 更新阴影
-        if hasattr(self.robot, 'visited_cells'):
-            for pos in self.robot.visited_cells:
-                if 0 <= pos[0] < self.grid_env.x_range and 0 <= pos[1] < self.grid_env.y_range:
-                    self.unexplored[pos[0], pos[1]] = 0
-        
-        self.shadow.set_data(self.unexplored.T)
-        
-        # 计算探索进度
-        total_cells = (self.grid_env.x_range - 2) * (self.grid_env.y_range - 2) - len(self.grid_env.obstacles)
-        if hasattr(self.robot, 'visited_cells'):
-            explored_cells = len(self.robot.visited_cells)
-        else:
-            explored_cells = 0
-        explored_percent = explored_cells / total_cells * 100 if total_cells > 0 else 0
-        
-        # 计算到目标的距离
-        dist_to_goal = math.sqrt((self.robot.x - self.goal_pos[0])**2 + (self.robot.y - self.goal_pos[1])**2)
-        
-        # 更新信息显示
-        info_str = f"位置: ({self.robot.x:.1f}, {self.robot.y:.1f})\n到终点距离: {dist_to_goal:.1f}\n探索进度: {explored_percent:.1f}%"
-        self.info_text.set_text(info_str)
-        
-        # 更新状态显示
-        if self.controller.current_state == "exploration":
-            status = "探索中"
-        elif self.controller.current_state == "path_planning":
-            status = "路径规划中"
-        elif self.controller.current_state == "navigation":
-            status = "导航中"
-        else:
-            status = "完成"
-            
-        status_str = f"状态: {status}"
-        if self.exploration_paused:
-            status_str += " (已暂停)"
-        self.status_text.set_text(status_str)
-        
-        # 刷新图形
-        self.fig.canvas.draw_idle()
-        self.fig.canvas.flush_events()
+        plt.tight_layout()
+        plt.draw()
     
     def run_animation(self, maze_exploration):
         """运行动画"""
