@@ -68,6 +68,11 @@ namespace BluetoothApp
             this.groupLog = new System.Windows.Forms.GroupBox();
             this.groupOther = new System.Windows.Forms.GroupBox();
             this.btnRobotControl = new System.Windows.Forms.Button();
+            this.btnMazeExploration = new System.Windows.Forms.Button();
+            this.btnAdvancedMazeExploration = new System.Windows.Forms.Button();
+            this.btnAutoControl = new System.Windows.Forms.Button();
+            this.btnSLAMAutoControl = new System.Windows.Forms.Button();
+            this.btnIntegratedSLAM = new System.Windows.Forms.Button();
             this.groupBluetoothHandle.SuspendLayout();
             this.groupSendHandle.SuspendLayout();
             this.groupDataHandle.SuspendLayout();
@@ -478,12 +483,77 @@ namespace BluetoothApp
             this.btnRobotControl.UseVisualStyleBackColor = false;
             this.btnRobotControl.Click += new System.EventHandler(this.btnRobotControl_Click);
             // 
+            // btnMazeExploration
+            // 
+            this.btnMazeExploration.BackColor = System.Drawing.Color.LightGreen;
+            this.btnMazeExploration.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            this.btnMazeExploration.Location = new System.Drawing.Point(613, 60);
+            this.btnMazeExploration.Name = "btnMazeExploration";
+            this.btnMazeExploration.Size = new System.Drawing.Size(120, 40);
+            this.btnMazeExploration.TabIndex = 26;
+            this.btnMazeExploration.Text = "迷宫探索";
+            this.btnMazeExploration.UseVisualStyleBackColor = false;
+            this.btnMazeExploration.Click += new System.EventHandler(this.btnMazeExploration_Click);
+            // 
+            // btnAdvancedMazeExploration
+            // 
+            this.btnAdvancedMazeExploration.BackColor = System.Drawing.Color.Orange;
+            this.btnAdvancedMazeExploration.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            this.btnAdvancedMazeExploration.Location = new System.Drawing.Point(613, 106);
+            this.btnAdvancedMazeExploration.Name = "btnAdvancedMazeExploration";
+            this.btnAdvancedMazeExploration.Size = new System.Drawing.Size(120, 40);
+            this.btnAdvancedMazeExploration.TabIndex = 27;
+            this.btnAdvancedMazeExploration.Text = "高级探索";
+            this.btnAdvancedMazeExploration.UseVisualStyleBackColor = false;
+            this.btnAdvancedMazeExploration.Click += new System.EventHandler(this.btnAdvancedMazeExploration_Click);
+            // 
+            // btnAutoControl
+            // 
+            this.btnAutoControl.BackColor = System.Drawing.Color.MediumPurple;
+            this.btnAutoControl.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            this.btnAutoControl.Location = new System.Drawing.Point(613, 156);
+            this.btnAutoControl.Name = "btnAutoControl";
+            this.btnAutoControl.Size = new System.Drawing.Size(120, 40);
+            this.btnAutoControl.TabIndex = 28;
+            this.btnAutoControl.Text = "自动控制";
+            this.btnAutoControl.UseVisualStyleBackColor = false;
+            this.btnAutoControl.Click += new System.EventHandler(this.btnAutoControl_Click);
+            // 
+            // btnSLAMAutoControl
+            // 
+            this.btnSLAMAutoControl.BackColor = System.Drawing.Color.DarkMagenta;
+            this.btnSLAMAutoControl.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            this.btnSLAMAutoControl.Location = new System.Drawing.Point(613, 206);
+            this.btnSLAMAutoControl.Name = "btnSLAMAutoControl";
+            this.btnSLAMAutoControl.Size = new System.Drawing.Size(120, 40);
+            this.btnSLAMAutoControl.TabIndex = 29;
+            this.btnSLAMAutoControl.Text = "SLAM控制";
+            this.btnSLAMAutoControl.UseVisualStyleBackColor = false;
+            this.btnSLAMAutoControl.Click += new System.EventHandler(this.btnSLAMAutoControl_Click);
+            // 
+            // btnIntegratedSLAM
+            // 
+            this.btnIntegratedSLAM.BackColor = System.Drawing.Color.DarkCyan;
+            this.btnIntegratedSLAM.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            this.btnIntegratedSLAM.Location = new System.Drawing.Point(613, 256);
+            this.btnIntegratedSLAM.Name = "btnIntegratedSLAM";
+            this.btnIntegratedSLAM.Size = new System.Drawing.Size(120, 40);
+            this.btnIntegratedSLAM.TabIndex = 30;
+            this.btnIntegratedSLAM.Text = "集成SLAM";
+            this.btnIntegratedSLAM.UseVisualStyleBackColor = false;
+            this.btnIntegratedSLAM.Click += new System.EventHandler(this.btnIntegratedSLAM_Click);
+            // 
             // BluetoothWindow
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.Control;
             this.ClientSize = new System.Drawing.Size(806, 440);
+            this.Controls.Add(this.btnIntegratedSLAM);
+            this.Controls.Add(this.btnSLAMAutoControl);
+            this.Controls.Add(this.btnAutoControl);
+            this.Controls.Add(this.btnAdvancedMazeExploration);
+            this.Controls.Add(this.btnMazeExploration);
             this.Controls.Add(this.btnRobotControl);
             this.Controls.Add(this.groupOther);
             this.Controls.Add(this.groupLog);
@@ -554,6 +624,11 @@ namespace BluetoothApp
         private System.Windows.Forms.GroupBox groupLog;
         private System.Windows.Forms.GroupBox groupOther;
         private System.Windows.Forms.Button btnRobotControl;
+        private System.Windows.Forms.Button btnMazeExploration;
+        private System.Windows.Forms.Button btnAdvancedMazeExploration;
+        private System.Windows.Forms.Button btnAutoControl;
+        private System.Windows.Forms.Button btnSLAMAutoControl;
+        private System.Windows.Forms.Button btnIntegratedSLAM;
     }
 }
 

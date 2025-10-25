@@ -35,7 +35,7 @@ class MazeEnvironment:
         if json_file and os.path.exists(json_file):
             # 检查是否是迷宫3，如果是，则特别设置终点位置
             if "3.json" in json_file:
-                self.goal_pos = (20, 15)  # 为迷宫3特别设置终点位置
+                self.goal_pos = (14, 12)  # 为迷宫3特别设置终点位置
                 
             self.grid_env = self.load_maze_from_json_file()
         else:

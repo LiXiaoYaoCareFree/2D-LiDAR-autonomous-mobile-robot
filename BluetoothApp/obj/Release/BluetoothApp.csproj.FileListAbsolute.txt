@@ -29,3 +29,4 @@ E:\code\2D-LiDAR-autonomous-mobile-robot\BluetoothApp\bin\Release\InTheHand.Net.
 E:\code\2D-LiDAR-autonomous-mobile-robot\BluetoothApp\obj\Release\Bluetoot.A16B0B25.Up2Date
 E:\code\2D-LiDAR-autonomous-mobile-robot\BluetoothApp\obj\Release\BluetoothApp.exe
 E:\code\2D-LiDAR-autonomous-mobile-robot\BluetoothApp\obj\Release\BluetoothApp.pdb
+E:\code\2D-LiDAR-autonomous-mobile-robot\BluetoothApp\bin\Release\Newtonsoft.Json.dll

@@ -31,6 +31,11 @@ namespace BluetoothApp
         private Dictionary<string, string> hashMap;
         private bool isShowBox = true;//防止短时间内过多弹窗
         public RobotController robotController;
+        private MazeExplorationForm mazeExplorationForm;
+        private AdvancedMazeExplorationForm advancedMazeExplorationForm;
+        private AutoControlForm autoControlForm;
+        private SLAMAutoControlForm slamAutoControlForm;
+        private IntegratedSLAMForm integratedSLAMForm;
 
         public BluetoothWindow()
         {
@@ -445,12 +450,70 @@ namespace BluetoothApp
             }
         }
 
+        private void OpenMazeExplorationForm()
+        {
+            try
+            {
+                if (robotController == null)
+                {
+                    MessageBox.Show("请先连接蓝牙设备！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (mazeExplorationForm == null || mazeExplorationForm.IsDisposed)
+                {
+                    mazeExplorationForm = new MazeExplorationForm(this);
+                }
+                
+                mazeExplorationForm.Show();
+                mazeExplorationForm.BringToFront();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开迷宫探索界面失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void OpenAdvancedMazeExplorationForm()
+        {
+            try
+            {
+                if (robotController == null)
+                {
+                    MessageBox.Show("请先连接蓝牙设备！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (advancedMazeExplorationForm == null || advancedMazeExplorationForm.IsDisposed)
+                {
+                    advancedMazeExplorationForm = new AdvancedMazeExplorationForm(this);
+                }
+                
+                advancedMazeExplorationForm.Show();
+                advancedMazeExplorationForm.BringToFront();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开高级迷宫探索界面失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         /// <summary>
         /// 小车控制按钮点击事件
         /// </summary>
         private void btnRobotControl_Click(object sender, EventArgs e)
         {
             OpenRobotControlForm();
+        }
+
+        private void btnMazeExploration_Click(object sender, EventArgs e)
+        {
+            OpenMazeExplorationForm();
+        }
+
+        private void btnAdvancedMazeExploration_Click(object sender, EventArgs e)
+        {
+            OpenAdvancedMazeExplorationForm();
         }
 
         #region 小车控制事件处理
@@ -564,6 +627,143 @@ namespace BluetoothApp
         public void UTurn()
         {
             robotController?.UTurn();
+        }
+
+        #endregion
+
+        #region 自动控制方法
+
+        /// <summary>
+        /// 打开自动控制界面
+        /// </summary>
+        private void OpenAutoControlForm()
+        {
+            try
+            {
+                if (robotController == null)
+                {
+                    MessageBox.Show("请先连接蓝牙设备！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (autoControlForm == null || autoControlForm.IsDisposed)
+                {
+                    autoControlForm = new AutoControlForm(this);
+                }
+                
+                autoControlForm.Show();
+                autoControlForm.BringToFront();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开自动控制界面失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 自动控制按钮点击事件
+        /// </summary>
+        private void btnAutoControl_Click(object sender, EventArgs e)
+        {
+            OpenAutoControlForm();
+        }
+
+        /// <summary>
+        /// 打开SLAM自动控制界面
+        /// </summary>
+        private void OpenSLAMAutoControlForm()
+        {
+            try
+            {
+                if (robotController == null)
+                {
+                    MessageBox.Show("请先连接蓝牙设备！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (slamAutoControlForm == null || slamAutoControlForm.IsDisposed)
+                {
+                    slamAutoControlForm = new SLAMAutoControlForm(this);
+                }
+                
+                slamAutoControlForm.Show();
+                slamAutoControlForm.BringToFront();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开SLAM自动控制界面失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// SLAM自动控制按钮点击事件
+        /// </summary>
+        private void btnSLAMAutoControl_Click(object sender, EventArgs e)
+        {
+            OpenSLAMAutoControlForm();
+        }
+
+        /// <summary>
+        /// 打开集成SLAM控制界面
+        /// </summary>
+        private void OpenIntegratedSLAMForm()
+        {
+            try
+            {
+                if (robotController == null)
+                {
+                    MessageBox.Show("请先连接蓝牙设备！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (integratedSLAMForm == null || integratedSLAMForm.IsDisposed)
+                {
+                    integratedSLAMForm = new IntegratedSLAMForm(this);
+                }
+                
+                integratedSLAMForm.Show();
+                integratedSLAMForm.BringToFront();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开集成SLAM控制界面失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 集成SLAM控制按钮点击事件
+        /// </summary>
+        private void btnIntegratedSLAM_Click(object sender, EventArgs e)
+        {
+            OpenIntegratedSLAMForm();
+        }
+
+        private void btnHardwarePythonSLAM_Click(object sender, EventArgs e)
+        {
+            OpenHardwarePythonSLAMForm();
+        }
+
+        /// <summary>
+        /// 打开硬件Python SLAM控制界面
+        /// </summary>
+        private void OpenHardwarePythonSLAMForm()
+        {
+            try
+            {
+                if (robotController == null)
+                {
+                    MessageBox.Show("请先连接蓝牙设备！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var hardwarePythonSLAMForm = new HardwarePythonSLAMForm(robotController);
+                hardwarePythonSLAMForm.Show();
+                hardwarePythonSLAMForm.BringToFront();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开硬件Python SLAM控制界面失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         #endregion

@@ -39,6 +39,9 @@
     <Reference Include="InTheHand.Net.Personal, Version=3.5.605.0, Culture=neutral, PublicKeyToken=ea38caa273134499, processorArchitecture=MSIL">
       <HintPath>packages\32feet.NET.3.5.0.0\lib\net\InTheHand.Net.Personal.dll</HintPath>
     </Reference>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Device" />
@@ -75,6 +78,40 @@
     <Compile Include="ClassicBluetooth.cs" />
     <Compile Include="RobotController.cs" />
     <Compile Include="RobotControlForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SLAMMap.cs" />
+    <Compile Include="MazeExplorationController.cs" />
+    <Compile Include="MapVisualizationControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="MazeExplorationForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="PoseGraphSLAM.cs" />
+    <Compile Include="AdvancedSLAMMap.cs" />
+    <Compile Include="AdvancedMapVisualizationControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="AdvancedMazeExplorationController.cs" />
+    <Compile Include="AStarPathPlanner.cs" />
+    <Compile Include="AdvancedMazeExplorationForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AutoRobotController.cs" />
+    <Compile Include="AutoControlForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SLAMAutoController.cs" />
+    <Compile Include="SLAMAutoControlForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="IntegratedSLAMController.cs" />
+    <Compile Include="IntegratedSLAMForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="PythonSLAMInterface.cs" />
+    <Compile Include="HardwarePythonSLAMForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Form1.cs">
