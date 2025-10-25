@@ -61,7 +61,7 @@ namespace BluetoothApp
         private float explorationSpeed = 0.5f; // m/s
         private float rotationSpeed = 1.0f; // rad/s
         private float laserRange = 5.0f; // 激光雷达范围
-        private int controlInterval = 100; // 控制间隔(ms)
+        private int controlInterval = 800; // 控制间隔(ms) - 稍微减少间隔让小车移动稍微快一点
         private int slamUpdateInterval = 200; // SLAM更新间隔(ms)
         
         // 探索状态
@@ -363,30 +363,30 @@ namespace BluetoothApp
             
             // 真实场景控制参数：280cm x 280cm，每4个格子70cm
             // 每个格子 = 70cm / 4 = 17.5cm
-            // 缓慢移动，小步长
+            // 稍微加快移动，适中步长
             float gridSize = 0.175f; // 17.5cm = 0.175m
-            float minDistance = gridSize * 0.5f; // 半个格子
-            float maxDistance = gridSize * 2.0f; // 两个格子
+            float minDistance = gridSize * 0.05f; // 0.05个格子 (0.875cm)
+            float maxDistance = gridSize * 0.15f; // 0.15个格子 (2.625cm)
             
             // 执行控制
-            if (Math.Abs(angleDiff) > 0.1f) // 需要转向
+            if (Math.Abs(angleDiff) > 0.03f) // 需要转向 - 稍微提高角度阈值
             {
                 if (angleDiff > 0)
                 {
-                    // 左转 - 缓慢转向
-                    autoController.AddCommand(AutoRobotController.DIR_LEFT, 200);
+                    // 左转 - 稍微加快转向
+                    autoController.AddCommand(AutoRobotController.DIR_LEFT, 80);
                 }
                 else
                 {
-                    // 右转 - 缓慢转向
-                    autoController.AddCommand(AutoRobotController.DIR_RIGHT, 200);
+                    // 右转 - 稍微加快转向
+                    autoController.AddCommand(AutoRobotController.DIR_RIGHT, 80);
                 }
             }
             else if (distance > minDistance) // 需要前进
             {
-                // 前进 - 限制最大距离，缓慢移动
+                // 前进 - 限制最大距离，稍微加快移动
                 float moveDistance = Math.Min(distance, maxDistance);
-                int duration = Math.Min(500, (int)(moveDistance * 2000)); // 缓慢移动
+                int duration = Math.Min(250, (int)(moveDistance * 5000)); // 稍微加快移动
                 autoController.AddCommand(AutoRobotController.DIR_FORWARD, duration);
                 
                 // 更新机器人位置（模拟）
@@ -416,7 +416,7 @@ namespace BluetoothApp
                 X = currentRobotState.X,
                 Y = currentRobotState.Y,
                 Theta = currentRobotState.Theta,
-                Velocity = 0.1f, // 缓慢速度
+                Velocity = 0.02f, // 稍微加快速度 (2cm/s)
                 Timestamp = DateTime.Now
             });
         }
