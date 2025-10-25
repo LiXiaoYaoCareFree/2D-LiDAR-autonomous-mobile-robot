@@ -1,0 +1,11 @@
+[07:25:43] 状态更新: 集成SLAM已启动，使用4.json迷宫数据
+[07:25:43] 找到项目根目录: E:\code\2D-LiDAR-autonomous-mobile-robot
+[07:25:43] 项目根目录: E:\code\2D-LiDAR-autonomous-mobile-robot
+[07:25:43] Python脚本路径: E:\code\2D-LiDAR-autonomous-mobile-robot\PoseGraph_Slam-Simulation\maze_slam_simulation.py
+[07:25:43] JSON文件路径: E:\code\2D-LiDAR-autonomous-mobile-robot\PoseGraph_Slam-Simulation\4.json
+[07:25:43] 正在启动Python SLAM仿真...
+[07:25:43] 启动Python SLAM仿真失败: 系统找不到指定的文件。
+[07:25:43] 详细错误:    在 System.Diagnostics.Process.StartWithShellExecuteEx(ProcessStartInfo startInfo)
+   在 System.Diagnostics.Process.Start()
+   在 BluetoothApp.IntegratedSLAMForm.StartPythonSLAMSimulation() 位置 E:\code\2D-LiDAR-autonomous-mobile-robot\BluetoothApp\IntegratedSLAMForm.cs:行号 419
+[07:25:43] 集成SLAM已启动，使用4.json数据，Python SLAM仿真已启动

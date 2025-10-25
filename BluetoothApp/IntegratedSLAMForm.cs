@@ -340,6 +340,34 @@ namespace BluetoothApp
             mapBitmap = new Bitmap(pnlMapDisplay.Width, pnlMapDisplay.Height);
             mapGraphics = Graphics.FromImage(mapBitmap);
             mapGraphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            
+            // 添加地图面板绘制事件
+            pnlMapDisplay.Paint += PnlMapDisplay_Paint;
+        }
+
+        /// <summary>
+        /// 地图面板绘制事件
+        /// </summary>
+        private void PnlMapDisplay_Paint(object sender, PaintEventArgs e)
+        {
+            try
+            {
+                if (mapBitmap != null)
+                {
+                    // 绘制地图位图
+                    e.Graphics.DrawImage(mapBitmap, 0, 0);
+                }
+                else
+                {
+                    // 绘制默认背景
+                    e.Graphics.Clear(Color.White);
+                    e.Graphics.DrawString("等待地图数据...", new Font("微软雅黑", 12), Brushes.Gray, 10, 10);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"地图绘制错误: {ex.Message}");
+            }
         }
         #endregion
 
@@ -352,27 +380,161 @@ namespace BluetoothApp
         {
             try
             {
-                // 启动Python SLAM仿真进程
+                // 智能检测项目根目录
+                string currentDir = Application.StartupPath;
+                string projectRoot = FindProjectRoot(currentDir);
+                string scriptPath = Path.Combine(projectRoot, "PoseGraph_Slam-Simulation", "maze_slam_simulation.py");
+                string jsonPath = Path.Combine(projectRoot, "PoseGraph_Slam-Simulation", "4.json");
+                
+                AddLog($"项目根目录: {projectRoot}");
+                AddLog($"Python脚本路径: {scriptPath}");
+                AddLog($"JSON文件路径: {jsonPath}");
+                
+                // 检查文件是否存在
+                if (!File.Exists(scriptPath))
+                {
+                    AddLog($"Python脚本不存在: {scriptPath}");
+                    return;
+                }
+                
+                if (!File.Exists(jsonPath))
+                {
+                    AddLog($"4.json文件不存在: {jsonPath}");
+                    return;
+                }
+
+                // 直接启动Python SLAM仿真
                 var pythonProcess = new System.Diagnostics.Process
                 {
                     StartInfo = new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = "python",
-                        Arguments = "\"../PoseGraph_Slam-Simulation/maze_slam_simulation.py\" --map_file=\"../PoseGraph_Slam-Simulation/4.json\" --real_robot_mode",
+                        Arguments = $"\"{scriptPath}\" --map=\"{jsonPath}\"",
                         UseShellExecute = false,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         CreateNoWindow = false,
-                        WorkingDirectory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+                        WorkingDirectory = Path.GetDirectoryName(scriptPath)
                     }
                 };
 
+                AddLog("正在启动Python SLAM仿真...");
                 pythonProcess.Start();
                 AddLog("Python SLAM仿真已启动，使用4.json地图数据");
+                
+                // 异步读取输出
+                pythonProcess.BeginOutputReadLine();
+                pythonProcess.BeginErrorReadLine();
+                
+                // 启动地图显示更新
+                StartMapDisplayUpdate();
             }
             catch (Exception ex)
             {
                 AddLog($"启动Python SLAM仿真失败: {ex.Message}");
+                AddLog($"详细错误: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// 启动地图显示更新
+        /// </summary>
+        private void StartMapDisplayUpdate()
+        {
+            try
+            {
+                // 启动地图显示定时器
+                if (statusUpdateTimer == null)
+                {
+                    statusUpdateTimer = new System.Windows.Forms.Timer();
+                    statusUpdateTimer.Interval = 100; // 100ms更新一次
+                    statusUpdateTimer.Tick += StatusUpdateTimer_Tick;
+                }
+                
+                statusUpdateTimer.Start();
+                AddLog("地图显示更新已启动");
+                
+                // 初始化地图显示
+                InitializeMapDisplay();
+            }
+            catch (Exception ex)
+            {
+                AddLog($"启动地图显示更新失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 检查Python环境
+        /// </summary>
+        private bool CheckPythonEnvironment()
+        {
+            try
+            {
+                var process = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "python",
+                        Arguments = "--version",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true
+                    }
+                };
+                
+                process.Start();
+                string output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit();
+                
+                AddLog($"Python版本: {output.Trim()}");
+                return process.ExitCode == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 检查Python依赖包
+        /// </summary>
+        private bool CheckPythonDependencies()
+        {
+            try
+            {
+                var process = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "python",
+                        Arguments = "-c \"import numpy, matplotlib, scipy; print('所有依赖包已安装')\"",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    }
+                };
+                
+                process.Start();
+                string output = process.StandardOutput.ReadToEnd();
+                string error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+                
+                if (process.ExitCode == 0)
+                {
+                    AddLog(output.Trim());
+                    return true;
+                }
+                else
+                {
+                    AddLog($"依赖包检查失败: {error}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog($"依赖包检查异常: {ex.Message}");
+                return false;
             }
         }
 
@@ -525,10 +687,196 @@ namespace BluetoothApp
             try
             {
                 UpdateButtonStates();
+                UpdateMapDisplay();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"状态更新错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 更新地图显示
+        /// </summary>
+        private void UpdateMapDisplay()
+        {
+            try
+            {
+                if (mapBitmap == null || mapGraphics == null) return;
+
+                // 清空地图
+                mapGraphics.Clear(Color.White);
+                
+                // 重新绘制迷宫
+                DrawMazeFrom4Json();
+                
+                // 绘制机器人位置（模拟）
+                DrawRobotPosition();
+                
+                // 绘制SLAM轨迹（模拟）
+                DrawSLAMTrajectory();
+                
+                // 刷新显示
+                pnlMapDisplay.Invalidate();
+            }
+            catch (Exception ex)
+            {
+                // 只在出现错误时输出日志，避免频繁输出
+                System.Diagnostics.Debug.WriteLine($"地图显示更新错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 绘制4.json迷宫数据
+        /// </summary>
+        private void DrawMazeFrom4Json()
+        {
+            try
+            {
+                // 设置绘制参数
+                Pen wallPen = new Pen(Color.Black, 2);
+                Brush startBrush = new SolidBrush(Color.Green);
+                Brush goalBrush = new SolidBrush(Color.Red);
+                
+                // 绘制边界墙
+                mapGraphics.DrawLine(wallPen, 0, 0, 0, 16);
+                mapGraphics.DrawLine(wallPen, 0, 16, 16, 16);
+                mapGraphics.DrawLine(wallPen, 0, 0, 16, 0);
+                mapGraphics.DrawLine(wallPen, 16, 0, 16, 16);
+                
+                // 绘制内部墙壁
+                mapGraphics.DrawLine(wallPen, 0, 12, 4, 12);
+                mapGraphics.DrawLine(wallPen, 4, 4, 4, 8);
+                mapGraphics.DrawLine(wallPen, 4, 8, 8, 8);
+                mapGraphics.DrawLine(wallPen, 8, 0, 8, 4);
+                mapGraphics.DrawLine(wallPen, 8, 8, 8, 12);
+                mapGraphics.DrawLine(wallPen, 8, 12, 16, 12);
+                mapGraphics.DrawLine(wallPen, 12, 4, 12, 12);
+                
+                // 绘制起始点
+                mapGraphics.FillEllipse(startBrush, 2 - 0.5f, 14 - 0.5f, 1, 1);
+                
+                // 绘制目标点
+                mapGraphics.FillEllipse(goalBrush, 14 - 0.5f, 10 - 0.5f, 1, 1);
+                
+                // 释放资源
+                wallPen.Dispose();
+                startBrush.Dispose();
+                goalBrush.Dispose();
+            }
+            catch (Exception ex)
+            {
+                AddLog($"绘制迷宫数据失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 绘制机器人位置
+        /// </summary>
+        private void DrawRobotPosition()
+        {
+            try
+            {
+                // 模拟机器人位置（从SLAM控制器获取）
+                if (slamController != null)
+                {
+                    var robotState = slamController.CurrentRobotState;
+                    if (robotState != null)
+                    {
+                        // 绘制机器人位置
+                        Brush robotBrush = new SolidBrush(Color.Blue);
+                        float robotX = robotState.X * 20 + 10; // 缩放和偏移
+                        float robotY = robotState.Y * 20 + 10;
+                        
+                        mapGraphics.FillEllipse(robotBrush, robotX - 2, robotY - 2, 4, 4);
+                        
+                        // 绘制机器人朝向
+                        Pen directionPen = new Pen(Color.Blue, 2);
+                        float endX = robotX + (float)Math.Cos(robotState.Theta) * 5;
+                        float endY = robotY + (float)Math.Sin(robotState.Theta) * 5;
+                        mapGraphics.DrawLine(directionPen, robotX, robotY, endX, endY);
+                        
+                        robotBrush.Dispose();
+                        directionPen.Dispose();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"绘制机器人位置错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 绘制SLAM轨迹
+        /// </summary>
+        private void DrawSLAMTrajectory()
+        {
+            try
+            {
+                // 模拟SLAM轨迹
+                if (slamController != null)
+                {
+                    var trajectory = slamController.RobotTrajectory;
+                    if (trajectory != null && trajectory.Count > 1)
+                    {
+                        Pen trajectoryPen = new Pen(Color.Green, 1);
+                        
+                        for (int i = 1; i < trajectory.Count; i++)
+                        {
+                            float x1 = trajectory[i-1].X * 20 + 10;
+                            float y1 = trajectory[i-1].Y * 20 + 10;
+                            float x2 = trajectory[i].X * 20 + 10;
+                            float y2 = trajectory[i].Y * 20 + 10;
+                            
+                            mapGraphics.DrawLine(trajectoryPen, x1, y1, x2, y2);
+                        }
+                        
+                        trajectoryPen.Dispose();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"绘制SLAM轨迹错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 智能查找项目根目录
+        /// </summary>
+        private string FindProjectRoot(string currentDir)
+        {
+            try
+            {
+                // 从当前目录开始向上查找，直到找到包含PoseGraph_Slam-Simulation的目录
+                string searchDir = currentDir;
+                
+                for (int i = 0; i < 5; i++) // 最多向上查找5级目录
+                {
+                    string testPath = Path.Combine(searchDir, "PoseGraph_Slam-Simulation", "maze_slam_simulation.py");
+                    if (File.Exists(testPath))
+                    {
+                        AddLog($"找到项目根目录: {searchDir}");
+                        return searchDir;
+                    }
+                    
+                    // 向上一级目录
+                    string parentDir = Path.GetDirectoryName(searchDir);
+                    if (parentDir == null || parentDir == searchDir)
+                        break;
+                    searchDir = parentDir;
+                }
+                
+                // 如果没找到，使用默认路径
+                string defaultRoot = Path.GetFullPath(Path.Combine(currentDir, "..", ".."));
+                AddLog($"使用默认项目根目录: {defaultRoot}");
+                return defaultRoot;
+            }
+            catch (Exception ex)
+            {
+                AddLog($"查找项目根目录失败: {ex.Message}");
+                return Path.GetFullPath(Path.Combine(currentDir, "..", ".."));
             }
         }
         #endregion
