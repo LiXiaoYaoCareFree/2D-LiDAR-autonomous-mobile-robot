@@ -1,0 +1,46 @@
+{
+  "communication": {
+    "port": "COM3",
+    "baudrate": 115200,
+    "timeout": 0.5,
+    "retry_count": 5
+  },
+  "sensor": {
+    "lidar_max_range": 5.0,
+    "lidar_min_range": 0.05,
+    "lidar_quality_threshold": 5,
+    "imu_weight": 0.8,
+    "encoder_weight": 0.2,
+    "wheel_base": 0.165
+  },
+  "mapping": {
+    "map_bounds": [-10, -10, 10, 10],
+    "map_resolution": 0.02,
+    "l_free": -0.3,
+    "l_occ": 0.9,
+    "l_min": -3.0,
+    "l_max": 3.0,
+    "hit_margin": 0.0005
+  },
+  "navigation": {
+    "robot_radius": 0.12,
+    "lookahead_distance": 0.5,
+    "max_linear_vel": 0.5,
+    "max_angular_vel": 3.0,
+    "k_angular": 2.0,
+    "k_avoid": 1.5,
+    "avoid_radius": 0.4,
+    "goal_tolerance": 0.05
+  },
+  "visualization": {
+    "figsize": [20, 15],
+    "layout": "1x3",
+    "update_interval": 0.05,
+    "save_images": true,
+    "image_dir": "debug_images"
+  },
+  "log_level": "DEBUG",
+  "data_logging": true,
+  "log_dir": "debug_logs",
+  "max_log_size": 200
+}

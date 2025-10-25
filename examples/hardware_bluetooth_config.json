@@ -1,0 +1,41 @@
+{
+  "bluetooth": {
+    "port": "COM3",
+    "baudrate": 115200,
+    "timeout": 0.1,
+    "retry_count": 3,
+    "auto_reconnect": true
+  },
+  "data_parsing": {
+    "lidar_pattern": "A:([-+]?\\d*\\.?\\d+),\\s*D:([-+]?\\d*\\.?\\d+)m?,\\s*Q:(\\d+)",
+    "imu_pattern": "roll:([-+]?\\d*\\.?\\d+),\\s*pitch:([-+]?\\d*\\.?\\d+),\\s*yaw:([-+]?\\d*\\.?\\d+)",
+    "motor_pattern": "MotorA:([-+]?\\d*\\.?\\d+),RPMB:([-+]?\\d*\\.?\\d+)",
+    "buffer_size": 1000,
+    "max_data_age": 10.0
+  },
+  "visualization": {
+    "update_interval": 50,
+    "max_lidar_points": 360,
+    "max_distance": 10.0,
+    "auto_scale": true,
+    "show_quality": true
+  },
+  "motor_control": {
+    "commands": {
+      "0": "停止",
+      "1": "前进", 
+      "2": "后退",
+      "3": "左转",
+      "4": "右转",
+      "5": "掉头"
+    },
+    "keyboard_control": true,
+    "command_delay": 0.1
+  },
+  "logging": {
+    "level": "INFO",
+    "save_to_file": true,
+    "log_file": "hardware_bluetooth.log",
+    "max_log_size": 10
+  }
+}

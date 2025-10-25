@@ -1,4 +1,3 @@
-
 # Introduction
 
 `Motion planning` plans the state sequence of the robot without conflict between the start and goal. 
